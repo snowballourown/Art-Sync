@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Art-Sync | 사장님 화면</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app-header">
+    <h1>🎨 화방 관리</h1>
+    <div class="right">
+        <button class="bell" onclick="toggleNotify()">🔔<span id="bellBadge" class="badge" style="display:none;">0</span></button>
+        <button class="btn-small btn-sub" onclick="logout()">로그아웃</button>
+    </div>
+</div>
+
+<div class="container">
+    <p id="hello" style="margin-bottom:14px;"></p>
+
+    <!-- 알림 패널 -->
+    <div id="notifyPanel" class="card notify-panel">
+        <h2>알림</h2>
+        <div id="notifyList"></div>
+    </div>
+
+    <div id="msg" class="msg"></div>
+
+    <!-- 1. 처리할 예약 요청 (가장 먼저, 가장 위에) -->
+    <div class="card">
+        <h2>처리할 예약 요청</h2>
+        <div id="pendingList"></div>
+    </div>
+
+    <!-- 2. 시간대 만들기 -->
+    <div class="card">
+        <h2>예약 시간대 만들기</h2>
+        <label for="cDate">날짜</label>
+        <input type="date" id="cDate">
+        <label for="cStart">시작 시간</label>
+        <input type="time" id="cStart" value="10:00">
+        <label for="cEnd">종료 시간</label>
+        <input type="time" id="cEnd" value="18:00">
+        <label for="cMinutes">한 타임 길이 (분)</label>
+        <input type="number" id="cMinutes" value="120" min="10" step="10">
+        <label for="cCapacity">한 타임 최대 인원</label>
+        <input type="number" id="cCapacity" value="4" min="1">
+        <button class="btn" onclick="createSlots()">시간대 만들기</button>
+        <p style="margin-top:10px; color:#888; font-size:15px;">
+            예) 10:00~18:00, 120분 → 4개 타임이 만들어져요. 만든 뒤 아래에서 "공개하기"를 눌러야 회원에게 보입니다.
+        </p>
+    </div>
+
+    <!-- 3. 날짜별 시간대 관리 -->
+    <div class="card">
+        <h2>시간대 관리 / 공개</h2>
+        <label for="mDate">날짜</label>
+        <input type="date" id="mDate">
+        <button class="btn btn-sub" onclick="loadAdminSlots()">이 날짜 시간대 보기</button>
+        <div id="adminSlotList" style="margin-top:16px;"></div>
+    </div>
+</div>
+
+<script src="app.js"></script>
+<script>
+    let currentUser = null;
+
+    (async function init() {
+        currentUser = await requireLogin('ADMIN');
+        if (!currentUser) return;
+        document.getElementById('hello').textContent = currentUser.name + ' 님, 안녕하세요.';
+
+        const today = todayIso();
+        document.getElementById('cDate').value = today;
+        document.getElementById('mDate').value = today;
+
+        loadPending();
+        loadAdminSlots();
+        loadNotifications();
+    })();
+
+    /* ---------- 처리할 예약 요청 ---------- */
+    async function loadPending() {
+        const box = document.getElementById('pendingList');
+        try {
+            const list = await api('GET', '/api/admin/reservations');
+            if (list.length === 0) {
+                box.innerHTML = '<div class="empty">처리할 예약 요청이 없어요.</div>';
+                return;
+            }
+            box.innerHTML = list.map(renderPending).join('');
+        } catch (e) {
+            box.innerHTML = '<div class="empty">' + e.message + '</div>';
+        }
+    }
+
+    function renderPending(r) {
+        return '<div class="item">'
+            + '<div class="time">' + formatDate(r.slotDate) + ' '
+            + formatTime(r.startTime) + ' ~ ' + formatTime(r.endTime) + '</div>'
+            + '<div class="meta">신청 회원 번호: ' + r.memberId
+            + (r.memo ? ' &nbsp; 메모: ' + r.memo : '') + '</div>'
+            + '<div class="btn-row">'
+            + '<button class="btn btn-green" onclick="confirmReservation(' + r.id + ')">수락</button>'
+            + '<button class="btn btn-gray" onclick="rejectReservation(' + r.id + ')">거절</button>'
+            + '</div></div>';
+    }
+
+    async function confirmReservation(id) {
+        if (!confirm('이 예약을 수락할까요?')) return;
+        try {
+            await api('PATCH', '/api/admin/reservations/' + id + '/confirm');
+            showMessage('msg', '예약을 수락했어요.', 'ok');
+            loadPending();
+            loadAdminSlots();
+        } catch (e) {
+            showMessage('msg', e.message, 'error');
+        }
+    }
+
+    async function rejectReservation(id) {
+        const reason = prompt('거절 사유를 입력하세요 (선택, 비워도 됩니다)');
+        if (reason === null) return; // 취소
+        try {
+            await api('PATCH', '/api/admin/reservations/' + id + '/reject', { reason: reason });
+            showMessage('msg', '예약을 거절했어요.', 'ok');
+            loadPending();
+        } catch (e) {
+            showMessage('msg', e.message, 'error');
+        }
+    }
+
+    /* ---------- 시간대 만들기 ---------- */
+    async function createSlots() {
+        const body = {
+            date: document.getElementById('cDate').value,
+            startTime: document.getElementById('cStart').value,
+            endTime: document.getElementById('cEnd').value,
+            slotMinutes: Number(document.getElementById('cMinutes').value),
+            capacity: Number(document.getElementById('cCapacity').value)
+        };
+        if (!body.date || !body.startTime || !body.endTime) {
+            showMessage('msg', '날짜와 시간을 모두 입력해 주세요.', 'error');
+            return;
+        }
+        try {
+            const ids = await api('POST', '/api/admin/slots', body);
+            showMessage('msg', ids.length + '개의 시간대를 만들었어요. 아래에서 공개해 주세요.', 'ok');
+            document.getElementById('mDate').value = body.date;
+            loadAdminSlots();
+        } catch (e) {
+            showMessage('msg', e.message, 'error');
+        }
+    }
+
+    /* ---------- 시간대 관리 / 공개 ---------- */
+    async function loadAdminSlots() {
+        const date = document.getElementById('mDate').value;
+        if (!date) return;
+        const box = document.getElementById('adminSlotList');
+        try {
+            const slots = await api('GET', '/api/admin/slots?date=' + date);
+            if (slots.length === 0) {
+                box.innerHTML = '<div class="empty">이 날짜에 만든 시간대가 없어요.</div>';
+                return;
+            }
+            box.innerHTML = slots.map(renderAdminSlot).join('');
+        } catch (e) {
+            box.innerHTML = '<div class="empty">' + e.message + '</div>';
+        }
+    }
+
+    function renderAdminSlot(slot) {
+        const toggleBtn = slot.active
+            ? '<button class="btn btn-gray" onclick="deactivateSlot(' + slot.id + ')">숨기기</button>'
+            : '<button class="btn btn-green" onclick="activateSlot(' + slot.id + ')">공개하기</button>';
+        const visibleText = slot.active ? '회원에게 공개됨' : '비공개';
+        return '<div class="item">'
+            + '<div class="time">' + formatTime(slot.startTime) + ' ~ ' + formatTime(slot.endTime) + '</div>'
+            + '<div class="meta">' + visibleText
+            + ' &nbsp; 예약 ' + slot.confirmedCount + ' / ' + slot.capacity + '명 '
+            + '<span class="badge-status ' + slotStatusClass(slot.status) + '">' + slotStatusLabel(slot.status) + '</span></div>'
+            + '<div class="btn-row">'
+            + toggleBtn
+            + '<button class="btn btn-danger" onclick="deleteSlot(' + slot.id + ')">삭제</button>'
+            + '</div></div>';
+    }
+
+    async function activateSlot(id) {
+        try {
+            await api('PATCH', '/api/admin/slots/' + id + '/activate');
+            loadAdminSlots();
+        } catch (e) { showMessage('msg', e.message, 'error'); }
+    }
+
+    async function deactivateSlot(id) {
+        try {
+            await api('PATCH', '/api/admin/slots/' + id + '/deactivate');
+            loadAdminSlots();
+        } catch (e) { showMessage('msg', e.message, 'error'); }
+    }
+
+    async function deleteSlot(id) {
+        if (!confirm('이 시간대를 삭제할까요?')) return;
+        try {
+            await api('DELETE', '/api/admin/slots/' + id);
+            showMessage('msg', '시간대를 삭제했어요.', 'ok');
+            loadAdminSlots();
+        } catch (e) {
+            showMessage('msg', e.message, 'error');
+        }
+    }
+
+    /* ---------- 알림 ---------- */
+    function toggleNotify() {
+        document.getElementById('notifyPanel').classList.toggle('show');
+    }
+
+    async function loadNotifications() {
+        try {
+            const list = await api('GET', '/api/notifications/me');
+            const countData = await api('GET', '/api/notifications/me/unread-count');
+            const badge = document.getElementById('bellBadge');
+            if (countData.unreadCount > 0) {
+                badge.textContent = countData.unreadCount;
+                badge.style.display = 'inline-block';
+            } else {
+                badge.style.display = 'none';
+            }
+            const box = document.getElementById('notifyList');
+            if (list.length === 0) {
+                box.innerHTML = '<div class="empty">알림이 없어요.</div>';
+                return;
+            }
+            box.innerHTML = list.map(function (n) {
+                return '<div class="notify-item ' + (n.read ? '' : 'unread') + '" '
+                    + (n.read ? '' : 'onclick="readNotification(' + n.id + ')"') + '>'
+                    + n.message
+                    + '<div class="when">' + formatDateTime(n.createdAt) + '</div>'
+                    + '</div>';
+            }).join('');
+        } catch (e) { /* 무시 */ }
+    }
+
+    async function readNotification(id) {
+        try {
+            await api('PATCH', '/api/notifications/' + id + '/read');
+            loadNotifications();
+        } catch (e) { /* 무시 */ }
+    }
+</script>
+</body>
+</html>

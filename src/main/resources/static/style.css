@@ -1,0 +1,269 @@
+/* ============================================
+   Art-Sync 공통 스타일
+   대상: 40~50대 사용자 — 큰 글자, 큰 버튼, 단순한 화면
+   ============================================ */
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: "Malgun Gothic", "맑은 고딕", -apple-system, sans-serif;
+    font-size: 18px;
+    line-height: 1.6;
+    color: #2b2b2b;
+    background: #f4f1ea;
+    -webkit-text-size-adjust: 100%;
+}
+
+.container {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 16px;
+}
+
+/* ---------- 헤더 ---------- */
+.app-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #6b4f3a;
+    color: #fff;
+    padding: 14px 16px;
+}
+
+.app-header h1 {
+    font-size: 20px;
+}
+
+.app-header .right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.bell {
+    position: relative;
+    font-size: 22px;
+    cursor: pointer;
+    background: none;
+    border: none;
+    color: #fff;
+}
+
+.bell .badge {
+    position: absolute;
+    top: -6px;
+    right: -8px;
+    background: #e23b3b;
+    color: #fff;
+    font-size: 12px;
+    font-weight: bold;
+    min-width: 18px;
+    height: 18px;
+    border-radius: 9px;
+    text-align: center;
+    line-height: 18px;
+    padding: 0 4px;
+}
+
+/* ---------- 카드 / 섹션 ---------- */
+.card {
+    background: #fff;
+    border-radius: 12px;
+    padding: 18px;
+    margin-bottom: 16px;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+
+.card h2 {
+    font-size: 20px;
+    margin-bottom: 14px;
+    color: #6b4f3a;
+}
+
+.card h3 {
+    font-size: 17px;
+    margin: 10px 0;
+}
+
+/* ---------- 폼 ---------- */
+label {
+    display: block;
+    font-size: 16px;
+    margin: 12px 0 4px;
+    font-weight: bold;
+}
+
+input, select {
+    width: 100%;
+    font-size: 18px;
+    padding: 12px;
+    border: 2px solid #cdbfa8;
+    border-radius: 8px;
+    background: #fff;
+}
+
+input:focus, select:focus {
+    outline: none;
+    border-color: #6b4f3a;
+}
+
+/* ---------- 버튼 ---------- */
+button {
+    font-family: inherit;
+}
+
+.btn {
+    display: block;
+    width: 100%;
+    font-size: 19px;
+    font-weight: bold;
+    padding: 14px;
+    margin-top: 14px;
+    border: none;
+    border-radius: 8px;
+    background: #6b4f3a;
+    color: #fff;
+    cursor: pointer;
+}
+
+.btn:active {
+    opacity: 0.85;
+}
+
+.btn-sub {
+    background: #efe7d8;
+    color: #6b4f3a;
+}
+
+.btn-green {
+    background: #2e8b57;
+}
+
+.btn-gray {
+    background: #888;
+}
+
+.btn-danger {
+    background: #c0392b;
+}
+
+.btn-row {
+    display: flex;
+    gap: 8px;
+}
+
+.btn-row .btn {
+    flex: 1;
+}
+
+.btn-small {
+    width: auto;
+    font-size: 16px;
+    padding: 10px 16px;
+    margin-top: 0;
+}
+
+/* ---------- 목록 항목 ---------- */
+.item {
+    border: 2px solid #e5dcc9;
+    border-radius: 10px;
+    padding: 14px;
+    margin-bottom: 10px;
+}
+
+.item .time {
+    font-size: 20px;
+    font-weight: bold;
+}
+
+.item .meta {
+    color: #6b6b6b;
+    font-size: 16px;
+    margin: 4px 0 8px;
+}
+
+/* ---------- 상태 배지 ---------- */
+.badge-status {
+    display: inline-block;
+    font-size: 15px;
+    font-weight: bold;
+    padding: 4px 12px;
+    border-radius: 14px;
+}
+
+.st-requested { background: #fff1c2; color: #946c00; }
+.st-confirmed { background: #d5f0df; color: #1f6b41; }
+.st-rejected  { background: #e6e6e6; color: #666; }
+.st-cancelled { background: #e6e6e6; color: #666; }
+.st-available { background: #d5f0df; color: #1f6b41; }
+.st-full      { background: #fde0dd; color: #b23b32; }
+.st-closed    { background: #e6e6e6; color: #666; }
+
+/* ---------- 안내 / 메시지 ---------- */
+.msg {
+    padding: 12px;
+    border-radius: 8px;
+    margin: 10px 0;
+    font-size: 16px;
+    display: none;
+}
+
+.msg.show { display: block; }
+.msg.error { background: #fde0dd; color: #b23b32; }
+.msg.ok { background: #d5f0df; color: #1f6b41; }
+
+.empty {
+    color: #999;
+    text-align: center;
+    padding: 20px;
+}
+
+.tabs {
+    display: flex;
+    margin-bottom: 16px;
+}
+
+.tabs button {
+    flex: 1;
+    font-size: 18px;
+    padding: 12px;
+    border: none;
+    background: #efe7d8;
+    color: #6b4f3a;
+    cursor: pointer;
+}
+
+.tabs button.active {
+    background: #6b4f3a;
+    color: #fff;
+    font-weight: bold;
+}
+
+.notify-panel {
+    display: none;
+}
+
+.notify-panel.show {
+    display: block;
+}
+
+.notify-item {
+    padding: 12px;
+    border-bottom: 1px solid #eee;
+    font-size: 16px;
+}
+
+.notify-item.unread {
+    background: #fffaf0;
+    font-weight: bold;
+}
+
+.notify-item .when {
+    color: #999;
+    font-size: 13px;
+    font-weight: normal;
+}

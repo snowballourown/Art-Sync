@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Art-Sync | 화방 예약</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app-header">
+    <h1>🎨 화방 예약</h1>
+</div>
+
+<div class="container">
+    <div class="tabs">
+        <button id="tabLogin" class="active" onclick="switchTab('login')">로그인</button>
+        <button id="tabSignup" onclick="switchTab('signup')">회원가입</button>
+    </div>
+
+    <div id="msg" class="msg"></div>
+
+    <!-- 로그인 -->
+    <div id="loginCard" class="card">
+        <h2>로그인</h2>
+        <label for="loginId">아이디</label>
+        <input type="text" id="loginId" autocomplete="username">
+        <label for="loginPw">비밀번호</label>
+        <input type="password" id="loginPw" autocomplete="current-password">
+        <button class="btn" onclick="doLogin()">로그인</button>
+        <p style="margin-top:14px; color:#888; font-size:15px;">
+            사장님 기본 계정: admin / admin1234
+        </p>
+    </div>
+
+    <!-- 회원가입 -->
+    <div id="signupCard" class="card" style="display:none;">
+        <h2>회원가입</h2>
+        <label for="suId">아이디</label>
+        <input type="text" id="suId">
+        <label for="suPw">비밀번호</label>
+        <input type="password" id="suPw">
+        <label for="suName">이름</label>
+        <input type="text" id="suName">
+        <label for="suPhone">연락처 (선택)</label>
+        <input type="text" id="suPhone" placeholder="010-0000-0000">
+        <button class="btn" onclick="doSignup()">가입하기</button>
+    </div>
+</div>
+
+<script src="app.js"></script>
+<script>
+    // 이미 로그인되어 있으면 알맞은 페이지로 이동
+    (async function () {
+        try {
+            const user = await api('GET', '/api/auth/me');
+            location.href = (user.role === 'ADMIN') ? 'admin.html' : 'member.html';
+        } catch (e) { /* 로그인 안 됨 - 그대로 머무름 */ }
+    })();
+
+    function switchTab(which) {
+        const isLogin = which === 'login';
+        document.getElementById('tabLogin').classList.toggle('active', isLogin);
+        document.getElementById('tabSignup').classList.toggle('active', !isLogin);
+        document.getElementById('loginCard').style.display = isLogin ? 'block' : 'none';
+        document.getElementById('signupCard').style.display = isLogin ? 'none' : 'block';
+        document.getElementById('msg').className = 'msg';
+    }
+
+    async function doLogin() {
+        const loginId = document.getElementById('loginId').value.trim();
+        const password = document.getElementById('loginPw').value;
+        if (!loginId || !password) {
+            showMessage('msg', '아이디와 비밀번호를 입력해 주세요.', 'error');
+            return;
+        }
+        try {
+            const user = await api('POST', '/api/auth/login', { loginId, password });
+            location.href = (user.role === 'ADMIN') ? 'admin.html' : 'member.html';
+        } catch (e) {
+            showMessage('msg', e.message, 'error');
+        }
+    }
+
+    async function doSignup() {
+        const loginId = document.getElementById('suId').value.trim();
+        const password = document.getElementById('suPw').value;
+        const name = document.getElementById('suName').value.trim();
+        const phone = document.getElementById('suPhone').value.trim();
+        if (!loginId || !password || !name) {
+            showMessage('msg', '아이디, 비밀번호, 이름은 꼭 입력해 주세요.', 'error');
+            return;
+        }
+        try {
+            await api('POST', '/api/auth/signup', { loginId, password, name, phone });
+            showMessage('msg', '가입이 완료되었어요. 로그인해 주세요.', 'ok');
+            switchTab('login');
+            document.getElementById('loginId').value = loginId;
+        } catch (e) {
+            showMessage('msg', e.message, 'error');
+        }
+    }
+
+    // 엔터키로 로그인
+    document.getElementById('loginPw').addEventListener('keyup', function (e) {
+        if (e.key === 'Enter') doLogin();
+    });
+</script>
+</body>
+</html>

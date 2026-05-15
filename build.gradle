@@ -1,0 +1,48 @@
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '3.2.5'
+    id 'io.spring.dependency-management' version '1.1.4'
+}
+
+group = 'com.artsync'
+version = '0.0.1-SNAPSHOT'
+
+java {
+    sourceCompatibility = '17'
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // 웹 (REST API)
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+
+    // JPA
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+
+    // 검증 (@Valid)
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+
+    // 보안 (세션 기반 로그인)
+    implementation 'org.springframework.boot:spring-boot-starter-security'
+
+    // 화면 (Thymeleaf) - 추후 사용, 지금은 의존성만 추가
+    implementation 'org.springframework.boot:spring-boot-starter-thymeleaf'
+
+    // DB 드라이버: MySQL (운영), H2 (개발/테스트용 인메모리)
+    runtimeOnly 'com.mysql:mysql-connector-j'
+    runtimeOnly 'com.h2database:h2'
+
+    // 개발 편의
+    developmentOnly 'org.springframework.boot:spring-boot-devtools'
+
+    // 테스트
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'org.springframework.security:spring-security-test'
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+}
