@@ -23,4 +23,7 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long> 
 
     /** 특정 슬롯의 확정 건수 (정원 검증용) */
     long countBySlotIdAndStatus(Long slotId, ReservationStatus status);
+
+    /** 여러 슬롯 ID + 복수 상태 조건으로 예약 목록 조회 (관리자 대시보드용) */
+    List<Reservation> findBySlotIdInAndStatusIn(List<Long> slotIds, List<ReservationStatus> statuses);
 }

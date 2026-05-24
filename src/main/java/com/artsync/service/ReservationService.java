@@ -175,6 +175,12 @@ public class ReservationService {
         return reservationRepository.findByStatusOrderByRequestedAtAsc(ReservationStatus.REQUESTED);
     }
 
+    /** 사장님용: 여러 슬롯 ID + 상태 목록으로 예약 조회 (대시보드용) */
+    public List<Reservation> getReservationsBySlotIds(List<Long> slotIds,
+                                                       List<ReservationStatus> statuses) {
+        return reservationRepository.findBySlotIdInAndStatusIn(slotIds, statuses);
+    }
+
     public Reservation getReservation(Long reservationId) {
         return reservationRepository.findById(reservationId)
                 .orElseThrow(() -> new NotFoundException("예약을 찾을 수 없습니다. id=" + reservationId));

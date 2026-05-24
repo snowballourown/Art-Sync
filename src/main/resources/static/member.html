@@ -16,29 +16,38 @@
 </div>
 
 <div class="container">
-    <p id="hello" style="margin-bottom:14px;"></p>
+    <p id="hello" class="greeting"></p>
 
     <!-- 알림 패널 -->
     <div id="notifyPanel" class="card notify-panel">
-        <h2>알림</h2>
+        <div class="card-header">
+            <span class="card-title">🔔 알림</span>
+        </div>
         <div id="notifyList"></div>
     </div>
 
     <div id="msg" class="msg"></div>
 
-    <!-- 예약 가능 시간대 -->
+    <!-- ① 내 예약 현황 (가장 먼저) -->
     <div class="card">
-        <h2>예약 가능한 시간 보기</h2>
-        <label for="date">날짜를 고르세요</label>
-        <input type="date" id="date">
-        <button class="btn" onclick="loadSlots()">이 날짜 시간대 보기</button>
-        <div id="slotList" style="margin-top:16px;"></div>
+        <div class="card-header">
+            <span class="card-title">📌 내 예약 현황</span>
+            <button class="btn btn-sub btn-small" onclick="loadMyReservations()">새로고침</button>
+        </div>
+        <div id="myReservations"></div>
     </div>
 
-    <!-- 내 예약 -->
+    <!-- ② 예약하기 -->
     <div class="card">
-        <h2>내 예약 현황</h2>
-        <div id="myReservations"></div>
+        <div class="card-header">
+            <span class="card-title">📅 예약하기</span>
+        </div>
+        <div class="date-row">
+            <input type="date" id="date" onchange="onDateChange()">
+            <button class="btn btn-sub btn-small" onclick="loadSlots()">시간대 보기</button>
+        </div>
+        <div id="dateWarningMsg" class="date-warning" style="display:none;"></div>
+        <div id="slotList"></div>
     </div>
 </div>
 
@@ -49,89 +58,88 @@
     (async function init() {
         currentUser = await requireLogin('MEMBER');
         if (!currentUser) return;
-        document.getElementById('hello').textContent = currentUser.name + ' 님, 안녕하세요.';
+        document.getElementById('hello').innerHTML = '<strong>' + currentUser.name + '</strong> 님, 안녕하세요!';
 
-        // 기본 날짜 = 내일 (오늘은 마감 규칙상 예약 불가)
+        // 기본 날짜 = 내일 (오늘은 마감이라 예약 불가)
         const t = new Date();
         t.setDate(t.getDate() + 1);
-        document.getElementById('date').value =
-            t.getFullYear() + '-' + String(t.getMonth() + 1).padStart(2, '0')
+        const tomorrow = t.getFullYear() + '-' + String(t.getMonth() + 1).padStart(2, '0')
             + '-' + String(t.getDate()).padStart(2, '0');
 
-        loadSlots();
+        const dateInput = document.getElementById('date');
+        dateInput.value = tomorrow;
+        dateInput.min = tomorrow;  // 오늘 이전 날짜 선택 불가
+
         loadMyReservations();
+        loadSlots();
         loadNotifications();
     })();
 
-    /* ---------- 예약 가능 시간대 ---------- */
-    async function loadSlots() {
+    function onDateChange() {
         const date = document.getElementById('date').value;
-        if (!date) return;
-        const box = document.getElementById('slotList');
-        try {
-            const slots = await api('GET', '/api/slots?date=' + date);
-            if (slots.length === 0) {
-                box.innerHTML = '<div class="empty">이 날짜에 열린 시간대가 없어요.</div>';
-                return;
-            }
-            box.innerHTML = slots.map(renderSlot).join('');
-        } catch (e) {
-            showMessage('msg', e.message, 'error');
-        }
-    }
-
-    function renderSlot(slot) {
-        const canReserve = slot.status === 'AVAILABLE' && slot.remaining > 0;
-        const button = canReserve
-            ? '<button class="btn btn-green" onclick="reserve(' + slot.id + ')">예약하기</button>'
-            : '<button class="btn btn-gray" disabled>예약 불가</button>';
-        return '<div class="item">'
-            + '<div class="time">' + formatTime(slot.startTime) + ' ~ ' + formatTime(slot.endTime) + '</div>'
-            + '<div class="meta">남은 자리 ' + slot.remaining + ' / ' + slot.capacity + '명 '
-            + '<span class="badge-status ' + slotStatusClass(slot.status) + '">' + slotStatusLabel(slot.status) + '</span></div>'
-            + button
-            + '</div>';
-    }
-
-    async function reserve(slotId) {
-        if (!confirm('이 시간대로 예약을 신청할까요?\n사장님이 확인 후 알려드려요.')) return;
-        try {
-            await api('POST', '/api/reservations', { slotId: slotId, memo: null });
-            showMessage('msg', '예약을 신청했어요. 사장님 확인을 기다려 주세요.', 'ok');
+        const today = todayIso();
+        const warn = document.getElementById('dateWarningMsg');
+        if (date <= today) {
+            warn.textContent = '⚠️ 오늘 및 이전 날짜는 예약 마감이에요. 내일 이후 날짜를 선택해 주세요.';
+            warn.style.display = 'block';
+            document.getElementById('slotList').innerHTML = '';
+        } else {
+            warn.style.display = 'none';
             loadSlots();
-            loadMyReservations();
-        } catch (e) {
-            showMessage('msg', e.message, 'error');
         }
     }
 
-    /* ---------- 내 예약 ---------- */
+    /* ── ① 내 예약 현황 ── */
     async function loadMyReservations() {
         const box = document.getElementById('myReservations');
+        box.innerHTML = '<div class="empty">불러오는 중...</div>';
         try {
             const list = await api('GET', '/api/reservations/me');
             if (list.length === 0) {
-                box.innerHTML = '<div class="empty">아직 예약 내역이 없어요.</div>';
+                box.innerHTML = '<div class="empty">아직 예약 내역이 없어요.<br>아래에서 예약을 신청해 보세요!</div>';
                 return;
             }
-            box.innerHTML = list.map(renderMyReservation).join('');
+            // 취소/거절 제외한 활성 예약을 위로
+            const active = list.filter(r => r.status === 'CONFIRMED' || r.status === 'REQUESTED');
+            const past   = list.filter(r => r.status !== 'CONFIRMED' && r.status !== 'REQUESTED');
+
+            let html = '';
+            if (active.length > 0) {
+                active.forEach(r => { html += renderMyReservation(r); });
+            }
+            if (past.length > 0) {
+                if (active.length > 0) {
+                    html += '<div style="font-size:13px;color:#aaa;margin:14px 0 8px;border-top:1px solid #eee;padding-top:12px;">지난 예약</div>';
+                }
+                past.forEach(r => { html += renderMyReservation(r); });
+            }
+            box.innerHTML = html;
         } catch (e) {
             box.innerHTML = '<div class="empty">' + e.message + '</div>';
         }
     }
 
     function renderMyReservation(r) {
+        const statusClass = 'status-' + r.status.toLowerCase();
         const cancellable = (r.status === 'REQUESTED' || r.status === 'CONFIRMED');
         const cancelBtn = cancellable
-            ? '<button class="btn btn-danger" onclick="cancelReservation(' + r.id + ')">예약 취소</button>'
+            ? '<button class="btn btn-danger btn-inline" onclick="cancelReservation(' + r.id + ')">예약 취소</button>'
             : '';
-        return '<div class="item">'
-            + '<div class="time">' + formatDate(r.slotDate) + ' '
-            + formatTime(r.startTime) + ' ~ ' + formatTime(r.endTime) + '</div>'
-            + '<div class="meta"><span class="badge-status ' + reservationStatusClass(r.status) + '">'
-            + reservationStatusLabel(r.status) + '</span>'
-            + (r.memo ? ' &nbsp; ' + r.memo : '') + '</div>'
+
+        // 상태 설명 추가
+        let statusNote = '';
+        if (r.status === 'REQUESTED') statusNote = '<span style="font-size:13px;color:#888;">사장님 확인을 기다리고 있어요</span>';
+        if (r.status === 'CONFIRMED') statusNote = '<span style="font-size:13px;color:#1f6b41;">예약이 확정되었어요 ✓</span>';
+
+        return '<div class="my-reservation-card ' + statusClass + '">'
+            + '<div class="res-date">' + formatDate(r.slotDate) + '</div>'
+            + '<div class="res-time">' + formatTime(r.startTime) + ' ~ ' + formatTime(r.endTime) + '</div>'
+            + '<div class="res-footer">'
+            + '<div>'
+            + '<span class="badge-status ' + reservationStatusClass(r.status) + '">' + reservationStatusLabel(r.status) + '</span>'
+            + '&nbsp;' + (statusNote || '') + '</div>'
             + cancelBtn
+            + '</div>'
             + '</div>';
     }
 
@@ -147,7 +155,55 @@
         }
     }
 
-    /* ---------- 알림 ---------- */
+    /* ── ② 예약하기 ── */
+    async function loadSlots() {
+        const date = document.getElementById('date').value;
+        if (!date) return;
+        const box = document.getElementById('slotList');
+        box.innerHTML = '<div class="empty">불러오는 중...</div>';
+        try {
+            const slots = await api('GET', '/api/slots?date=' + date);
+            if (slots.length === 0) {
+                box.innerHTML = '<div class="empty">이 날짜에 열린 시간대가 없어요.</div>';
+                return;
+            }
+            box.innerHTML = slots.map(renderSlot).join('');
+        } catch (e) {
+            box.innerHTML = '<div class="empty">' + e.message + '</div>';
+        }
+    }
+
+    function renderSlot(slot) {
+        const canReserve = slot.status === 'AVAILABLE' && slot.remaining > 0;
+        const button = canReserve
+            ? '<button class="btn btn-green" onclick="reserve(' + slot.id + ')">예약 신청하기</button>'
+            : '<button class="btn btn-gray" disabled>예약 불가</button>';
+
+        return '<div class="slot-card">'
+            + '<div class="slot-card-header">'
+            + '<span class="slot-time">' + formatTime(slot.startTime) + ' ~ ' + formatTime(slot.endTime) + '</span>'
+            + '<span class="slot-meta">'
+            + '<span class="slot-count">남은 자리 ' + slot.remaining + ' / ' + slot.capacity + '명</span>'
+            + '<span class="badge-status ' + slotStatusClass(slot.status) + '">' + slotStatusLabel(slot.status) + '</span>'
+            + '</span>'
+            + '</div>'
+            + '<div class="slot-body">' + button + '</div>'
+            + '</div>';
+    }
+
+    async function reserve(slotId) {
+        if (!confirm('이 시간대로 예약을 신청할까요?\n사장님이 확인 후 알려드려요.')) return;
+        try {
+            await api('POST', '/api/reservations', { slotId: slotId, memo: null });
+            showMessage('msg', '예약을 신청했어요! 사장님 확인을 기다려 주세요.', 'ok');
+            loadSlots();
+            loadMyReservations();
+        } catch (e) {
+            showMessage('msg', e.message, 'error');
+        }
+    }
+
+    /* ── 알림 ── */
     function toggleNotify() {
         document.getElementById('notifyPanel').classList.toggle('show');
     }
