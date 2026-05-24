@@ -14,7 +14,9 @@ import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import com.artsync.dto.DaySummaryResponse;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -90,6 +92,56 @@ public class AdminReservationController {
         String reason = (request == null) ? null : request.reason();
         reservationService.reject(adminId, id, reason);
         return ResponseEntity.ok().build();
+    }
+
+
+    /**
+     * 월간 예약 요약 — 달력 뷰용 (FR 기능 2).
+     * 해당 월의 모든 날짜 중 슬롯이 있는 날짜만 반환한다.
+     */
+    @GetMapping("/monthly-summary")
+    public List<DaySummaryResponse> monthlySummary(
+            @RequestParam int year,
+            @RequestParam int month,
+            HttpSession session) {
+        Long adminId = SessionUtil.currentUserId(session);
+        userService.requireAdmin(adminId);
+
+        LocalDate from = LocalDate.of(year, month, 1);
+        LocalDate to = from.withDayOfMonth(from.lengthOfMonth());
+
+        List<com.artsync.domain.slot.TimeSlot> allSlots =
+                timeSlotService.getSlotsForAdminBetween(from, to);
+
+        Map<LocalDate, List<com.artsync.domain.slot.TimeSlot>> slotsByDate = allSlots.stream()
+                .collect(Collectors.groupingBy(com.artsync.domain.slot.TimeSlot::getSlotDate));
+
+        List<Long> slotIds = allSlots.stream()
+                .map(com.artsync.domain.slot.TimeSlot::getId).toList();
+
+        List<com.artsync.domain.reservation.Reservation> reservations = slotIds.isEmpty()
+                ? List.of()
+                : reservationService.getReservationsBySlotIds(slotIds,
+                        List.of(ReservationStatus.REQUESTED, ReservationStatus.CONFIRMED));
+
+        Map<Long, List<com.artsync.domain.reservation.Reservation>> resBySlot = reservations.stream()
+                .collect(Collectors.groupingBy(
+                        com.artsync.domain.reservation.Reservation::getSlotId));
+
+        List<DaySummaryResponse> result = new ArrayList<>();
+        for (LocalDate date = from; !date.isAfter(to); date = date.plusDays(1)) {
+            List<com.artsync.domain.slot.TimeSlot> daySlots =
+                    slotsByDate.getOrDefault(date, List.of());
+            if (daySlots.isEmpty()) continue;
+
+            List<ReservationResponse> dayReservations = daySlots.stream()
+                    .flatMap(slot -> resBySlot.getOrDefault(slot.getId(), List.of()).stream()
+                            .map(r -> ReservationResponse.of(r, slot, tryGetMemberName(r.getMemberId()))))
+                    .toList();
+
+            result.add(new DaySummaryResponse(date, daySlots.size(), dayReservations));
+        }
+        return result;
     }
 
     private ReservationResponse toResponseWithName(Reservation reservation) {

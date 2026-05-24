@@ -28,6 +28,30 @@
 
     <div id="msg" class="msg"></div>
 
+    <!-- 📅 월별 다이어리 -->
+    <div class="card">
+        <div class="collapsible-header" onclick="toggleSection('diary')">
+            <span class="card-title">📅 월별 다이어리</span>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div id="diaryBody" class="collapsible-body open">
+            <div class="cal-nav">
+                <button class="btn btn-sub btn-small" onclick="moveDiaryMonth(-1)">‹ 이전</button>
+                <span id="diaryMonthLabel" class="cal-month-label"></span>
+                <button class="btn btn-sub btn-small" onclick="moveDiaryMonth(1)">다음 ›</button>
+            </div>
+            <div id="calGrid"></div>
+            <!-- 날짜 클릭 상세 패널 -->
+            <div id="dayDetailPanel" class="day-detail-panel" style="display:none;">
+                <div class="day-detail-header">
+                    <span id="dayDetailTitle" class="day-detail-title-text"></span>
+                    <button class="btn-close" onclick="closeDayDetail()">✕</button>
+                </div>
+                <div id="dayDetailContent" class="day-detail-content"></div>
+            </div>
+        </div>
+    </div>
+
     <!-- ① 예약 현황 대시보드 (가장 먼저) -->
     <div class="card">
         <div class="card-header">
@@ -44,6 +68,7 @@
     <div class="card">
         <div class="card-header">
             <span class="card-title" id="pendingTitle">📬 처리할 예약 요청</span>
+            <button class="btn btn-green btn-small" id="confirmAllBtn" style="display:none;" onclick="confirmAllReservations()">✅ 전체 수락</button>
         </div>
         <div id="pendingList"></div>
     </div>
@@ -55,10 +80,45 @@
             <span class="toggle-icon">▼</span>
         </div>
         <div id="createSlotBody" class="collapsible-body">
-            <!-- 날짜 + 경고 -->
-            <label for="cDate">날짜</label>
-            <input type="date" id="cDate" onchange="onAdminDateChange()">
-            <div id="adminDateWarning" class="date-warning" style="display:none;"></div>
+            <!-- 날짜 모드 탭 -->
+            <div class="date-mode-tabs">
+                <button class="tab-btn active" id="tabSingle" onclick="setDateMode('single')">📅 단일 날짜</button>
+                <button class="tab-btn" id="tabRepeat" onclick="setDateMode('repeat')">🔁 요일 반복</button>
+            </div>
+
+            <!-- 단일 날짜 모드 -->
+            <div id="modeSingle">
+                <label for="cDate">날짜</label>
+                <input type="date" id="cDate" onchange="onAdminDateChange()">
+                <div id="adminDateWarning" class="date-warning" style="display:none;"></div>
+            </div>
+
+            <!-- 요일 반복 모드 -->
+            <div id="modeRepeat" style="display:none;">
+                <div class="repeat-range">
+                    <div>
+                        <label for="rFrom">시작일</label>
+                        <input type="date" id="rFrom" onchange="updateRepeatPreview()">
+                    </div>
+                    <div>
+                        <label for="rTo">종료일</label>
+                        <input type="date" id="rTo" onchange="updateRepeatPreview()">
+                    </div>
+                </div>
+                <span class="weekday-label">반복 요일</span>
+                <div class="weekday-btns">
+                    <button class="wd-btn" data-dow="0" onclick="toggleDow(0)">일</button>
+                    <button class="wd-btn" data-dow="1" onclick="toggleDow(1)">월</button>
+                    <button class="wd-btn" data-dow="2" onclick="toggleDow(2)">화</button>
+                    <button class="wd-btn" data-dow="3" onclick="toggleDow(3)">수</button>
+                    <button class="wd-btn" data-dow="4" onclick="toggleDow(4)">목</button>
+                    <button class="wd-btn" data-dow="5" onclick="toggleDow(5)">금</button>
+                    <button class="wd-btn" data-dow="6" onclick="toggleDow(6)">토</button>
+                </div>
+                <div id="repeatPreview" class="repeat-preview">
+                    <span class="preview-empty">날짜 범위와 요일을 선택하면 대상 날짜가 표시됩니다.</span>
+                </div>
+            </div>
 
             <!-- 슬롯 설정 -->
             <div class="slot-grid-settings">
@@ -80,8 +140,12 @@
             <div id="timeGridPm" class="time-grid"></div>
 
             <div id="selectedCount" class="selected-count" style="display:none;"></div>
+            <label class="auto-activate-label" id="autoActivateWrap" style="display:none;">
+                <input type="checkbox" id="autoActivate" checked>
+                만들면서 바로 공개 <span style="font-weight:normal;color:#888;">(회원에게 즉시 노출)</span>
+            </label>
             <button class="btn" id="createBtn" onclick="createSlotsFromGrid()" style="display:none;">선택한 시간대 만들기</button>
-            <p style="margin-top:8px; color:#aaa; font-size:13px;">만든 뒤 "시간대 관리"에서 공개 버튼을 눌러야 회원에게 보여요.</p>
+            <p id="activateHint" style="margin-top:8px; color:#aaa; font-size:13px;">만든 뒤 "시간대 관리"에서 공개 버튼을 눌러야 회원에게 보여요.</p>
         </div>
     </div>
 
@@ -116,10 +180,227 @@
         document.getElementById('mDate').value = today;
 
         renderTimeGrid();  // 시간 그리드 초기 렌더링
+        loadDiary();
         loadDashboard();
         loadPending();
         loadNotifications();
     })();
+
+
+    /* ══════════════════════════════════════════
+       📅 월별 다이어리
+    ══════════════════════════════════════════ */
+    /** Date 객체 → 로컬 시간 기준 YYYY-MM-DD (toISOString은 UTC라 한국에서 하루 밀림) */
+    function localDateIso(d) {
+        return d.getFullYear() + '-'
+            + String(d.getMonth() + 1).padStart(2, '0') + '-'
+            + String(d.getDate()).padStart(2, '0');
+    }
+
+    let diaryYear  = new Date().getFullYear();
+    let diaryMonth = new Date().getMonth() + 1;
+    let diaryDataMap = {};   // { "YYYY-MM-DD": DaySummaryResponse }
+
+    async function loadDiary() {
+        document.getElementById('diaryMonthLabel').textContent =
+            diaryYear + '년 ' + diaryMonth + '월';
+        try {
+            const list = await api('GET',
+                '/api/admin/reservations/monthly-summary?year=' + diaryYear + '&month=' + diaryMonth);
+            diaryDataMap = {};
+            list.forEach(d => { diaryDataMap[d.date] = d; });
+        } catch (e) {
+            diaryDataMap = {};
+        }
+        renderCalendar();
+    }
+
+    function moveDiaryMonth(delta) {
+        diaryMonth += delta;
+        if (diaryMonth > 12) { diaryMonth = 1; diaryYear++; }
+        if (diaryMonth < 1)  { diaryMonth = 12; diaryYear--; }
+        closeDayDetail();
+        loadDiary();
+    }
+
+    function renderCalendar() {
+        const firstDow   = new Date(diaryYear, diaryMonth - 1, 1).getDay();
+        const daysInMonth = new Date(diaryYear, diaryMonth, 0).getDate();
+        const todayStr   = todayIso();
+        const DOW_LABELS = ['일','월','화','수','목','금','토'];
+
+        let html = '<div class="cal-header-row">'
+            + DOW_LABELS.map(d => '<div class="cal-hcell">' + d + '</div>').join('')
+            + '</div><div class="cal-body">';
+
+        // 첫 주 빈 칸
+        for (let i = 0; i < firstDow; i++) html += '<div class="cal-cell empty"></div>';
+
+        for (let d = 1; d <= daysInMonth; d++) {
+            const dateStr = diaryYear + '-' + pad(diaryMonth) + '-' + pad(d);
+            const summary = diaryDataMap[dateStr];
+            const isToday = dateStr === todayStr;
+
+            let cls = 'cal-cell';
+            if (isToday) cls += ' cal-today';
+
+            let inner = '<div class="cal-day-num">' + d + '</div>';
+
+            if (summary) {
+                if (summary.reservations.length > 0) {
+                    const hasPending = summary.reservations.some(r => r.status === 'REQUESTED');
+                    cls += hasPending ? ' cal-has-pending' : ' cal-has-res';
+
+                    // 이름별 예약 시간 수집 (툴팁용)
+                    const nameMap = {};
+                    summary.reservations.forEach(r => {
+                        const nm = r.memberName || ('회원#' + r.memberId);
+                        if (!nameMap[nm]) nameMap[nm] = [];
+                        nameMap[nm].push(formatTime(r.startTime));
+                    });
+                    const names = Object.keys(nameMap);
+                    names.slice(0, 3).forEach(nm => {
+                        const tooltip = nm + ': ' + nameMap[nm].join(', ');
+                        inner += '<div class="cal-name" data-tooltip="' + tooltip + '">' + nm + '</div>';
+                    });
+                    if (names.length > 3)
+                        inner += '<div class="cal-more">+' + (names.length - 3) + '명 더</div>';
+                } else if (summary.slotCount > 0) {
+                    cls += ' cal-has-slots';
+                    inner += '<div class="cal-slot-count">' + summary.slotCount + '타임</div>';
+                }
+            }
+
+            html += '<div class="' + cls + '" onclick="openDayDetail(\'' + dateStr + '\')">' + inner + '</div>';
+        }
+
+        // 마지막 주 빈 칸
+        const filled = firstDow + daysInMonth;
+        const rem = filled % 7 === 0 ? 0 : 7 - (filled % 7);
+        for (let i = 0; i < rem; i++) html += '<div class="cal-cell empty"></div>';
+        html += '</div>';
+
+        document.getElementById('calGrid').innerHTML = html;
+    }
+
+    function openDayDetail(dateStr) {
+        const panel = document.getElementById('dayDetailPanel');
+        const title = document.getElementById('dayDetailTitle');
+        const body  = document.getElementById('dayDetailContent');
+
+        // 날짜 표시
+        const [y, m, d] = dateStr.split('-').map(Number);
+        const DOW_KO = ['일','월','화','수','목','금','토'];
+        const dow = new Date(y, m - 1, d).getDay();
+        title.textContent = y + '년 ' + m + '월 ' + d + '일 (' + DOW_KO[dow] + ')';
+
+        const summary = diaryDataMap[dateStr];
+        if (!summary) {
+            body.innerHTML = '<div class="empty">이 날짜에 만든 시간대가 없어요.</div>';
+        } else if (summary.reservations.length === 0) {
+            body.innerHTML = '<div class="empty">슬롯은 ' + summary.slotCount + '개 있지만 예약이 없어요.</div>';
+        } else {
+            // 슬롯(시간)별로 예약 그룹화
+            const slotMap = {};
+            summary.reservations.forEach(r => {
+                const key = formatTime(r.startTime) + '~' + formatTime(r.endTime);
+                if (!slotMap[key]) slotMap[key] = [];
+                slotMap[key].push(r);
+            });
+            let html = '';
+            Object.entries(slotMap).sort((a,b) => a[0].localeCompare(b[0])).forEach(([time, rs]) => {
+                html += '<div style="margin-bottom:12px;">'
+                    + '<div style="font-weight:bold;color:var(--brown-dark);font-size:15px;margin-bottom:6px;">'
+                    + '🕐 ' + time + '</div>';
+                rs.forEach(r => {
+                    const nm  = r.memberName || ('회원#' + r.memberId);
+                    const sc  = r.status === 'CONFIRMED' ? 'st-confirmed' : 'st-requested';
+                    const sl  = r.status === 'CONFIRMED' ? '확정' : '대기중';
+                    const icon = r.status === 'CONFIRMED' ? '✅' : '⏳';
+                    html += '<div class="member-row">'
+                        + icon + ' <span class="member-name">' + nm + '</span>'
+                        + '&nbsp;<span class="badge-status ' + sc + '">' + sl + '</span>'
+                        + '</div>';
+                });
+                html += '</div>';
+            });
+            body.innerHTML = html;
+        }
+        panel.style.display = 'block';
+    }
+
+    function closeDayDetail() {
+        document.getElementById('dayDetailPanel').style.display = 'none';
+    }
+
+    /* ══════════════════════════════════════════
+       🔁 시간대 만들기 — 요일 반복 모드
+    ══════════════════════════════════════════ */
+    let currentDateMode = 'single';
+    let selectedDows = new Set();   // 0=일, 1=월, ... 6=토
+
+    function setDateMode(mode) {
+        currentDateMode = mode;
+        document.getElementById('modeSingle').style.display = mode === 'single' ? 'block' : 'none';
+        document.getElementById('modeRepeat').style.display = mode === 'repeat' ? 'block' : 'none';
+        document.getElementById('tabSingle').classList.toggle('active', mode === 'single');
+        document.getElementById('tabRepeat').classList.toggle('active', mode === 'repeat');
+        // 반복 모드 초기값
+        if (mode === 'repeat') {
+            const today = todayIso();
+            if (!document.getElementById('rFrom').value) document.getElementById('rFrom').value = today;
+            if (!document.getElementById('rTo').value) {
+                const d = new Date();
+                d.setDate(d.getDate() + 27); // 4주 후
+                document.getElementById('rTo').value = localDateIso(d);
+            }
+            updateRepeatPreview();
+        }
+        selectedTimes.clear();
+        renderTimeGrid();
+    }
+
+    function toggleDow(dow) {
+        if (selectedDows.has(dow)) selectedDows.delete(dow);
+        else selectedDows.add(dow);
+        document.querySelectorAll('.wd-btn').forEach(btn => {
+            const d = Number(btn.dataset.dow);
+            btn.classList.toggle('selected', selectedDows.has(d));
+        });
+        updateRepeatPreview();
+    }
+
+    function getRepeatDates() {
+        const from = document.getElementById('rFrom').value;
+        const to   = document.getElementById('rTo').value;
+        if (!from || !to || selectedDows.size === 0) return [];
+        const result = [];
+        let cur = new Date(from + 'T00:00:00');
+        const end = new Date(to + 'T00:00:00');
+        while (cur <= end) {
+            if (selectedDows.has(cur.getDay())) {
+                result.push(localDateIso(cur));  // 로컬 날짜로 변환 (UTC 아님)
+            }
+            cur.setDate(cur.getDate() + 1);
+        }
+        return result;
+    }
+
+    function updateRepeatPreview() {
+        const dates = getRepeatDates();
+        const box = document.getElementById('repeatPreview');
+        if (dates.length === 0) {
+            box.innerHTML = '<span class="preview-empty">날짜 범위와 요일을 선택하면 대상 날짜가 표시됩니다.</span>';
+            return;
+        }
+        const DOW_KO = ['일','월','화','수','목','금','토'];
+        const chips = dates.map(ds => {
+            const [y, m, d] = ds.split('-').map(Number);
+            const dow = new Date(y, m-1, d).getDay();
+            return '<span class="repeat-date-chip">' + m + '/' + d + '(' + DOW_KO[dow] + ')</span>';
+        }).join('');
+        box.innerHTML = '총 <strong>' + dates.length + '일</strong>: ' + chips;
+    }
 
     /* ── 접기/펼치기 ── */
     function toggleSection(name) {
@@ -196,21 +477,45 @@
     }
 
     /* ── ② 처리할 예약 요청 ── */
+    let pendingList = [];   // 전체 수락 시 참조용
+
     async function loadPending() {
         const box = document.getElementById('pendingList');
         const title = document.getElementById('pendingTitle');
+        const allBtn = document.getElementById('confirmAllBtn');
         try {
             const list = await api('GET', '/api/admin/reservations');
+            pendingList = list;
             if (list.length === 0) {
                 title.innerHTML = '📬 처리할 예약 요청';
                 box.innerHTML = '<div class="empty">처리할 예약 요청이 없어요.</div>';
+                allBtn.style.display = 'none';
                 return;
             }
             title.innerHTML = '📬 처리할 예약 요청 <span class="count-badge">' + list.length + '</span>';
             box.innerHTML = list.map(renderPending).join('');
+            allBtn.style.display = list.length >= 2 ? 'block' : 'none';  // 2건 이상일 때만 노출
         } catch (e) {
             box.innerHTML = '<div class="empty">' + e.message + '</div>';
         }
+    }
+
+    async function confirmAllReservations() {
+        if (!confirm('대기 중인 예약 ' + pendingList.length + '건을 모두 수락할까요?')) return;
+        let ok = 0, fail = 0;
+        for (const r of pendingList) {
+            try {
+                await api('PATCH', '/api/admin/reservations/' + r.id + '/confirm');
+                ok++;
+            } catch (e) {
+                fail++;
+            }
+        }
+        if (ok > 0) showMessage('msg', ok + '건을 수락했어요.' + (fail > 0 ? ' (' + fail + '건 실패)' : ''), 'ok');
+        else showMessage('msg', '수락에 실패했어요.', 'error');
+        loadPending();
+        loadDashboard();
+        loadDiary();
     }
 
     function renderPending(r) {
@@ -328,66 +633,88 @@
     function updateGridStatus() {
         const cnt = selectedTimes.size;
         const countEl = document.getElementById('selectedCount');
-        const btnEl = document.getElementById('createBtn');
+        const btnEl   = document.getElementById('createBtn');
+        const wrapEl  = document.getElementById('autoActivateWrap');
+        const hintEl  = document.getElementById('activateHint');
         if (cnt > 0) {
             countEl.textContent = cnt + '개 시간대 선택됨';
             countEl.style.display = 'block';
             btnEl.textContent = '선택한 시간대 ' + cnt + '개 만들기';
             btnEl.style.display = 'block';
+            wrapEl.style.display = 'block';
+            hintEl.style.display = 'none';
         } else {
             countEl.style.display = 'none';
             btnEl.style.display = 'none';
+            wrapEl.style.display = 'none';
+            hintEl.style.display = 'block';
         }
     }
 
     async function createSlotsFromGrid() {
-        const date = document.getElementById('cDate').value;
         const slotMinutes = Number(document.getElementById('cMinutes').value);
         const capacity = Number(document.getElementById('cCapacity').value) || 4;
+        const autoActivate = document.getElementById('autoActivate').checked;
 
-        if (!date) {
-            showMessage('msg', '날짜를 선택해 주세요.', 'error');
-            return;
-        }
         if (selectedTimes.size === 0) {
             showMessage('msg', '시간대를 하나 이상 선택해 주세요.', 'error');
             return;
         }
 
+        // 대상 날짜 목록
+        let targetDates = [];
+        if (currentDateMode === 'single') {
+            const date = document.getElementById('cDate').value;
+            if (!date) { showMessage('msg', '날짜를 선택해 주세요.', 'error'); return; }
+            targetDates = [date];
+        } else {
+            targetDates = getRepeatDates();
+            if (targetDates.length === 0) {
+                showMessage('msg', '날짜 범위와 반복 요일을 선택해 주세요.', 'error'); return;
+            }
+        }
+
         let created = 0;
         const failed = [];
 
-        for (const startStr of [...selectedTimes].sort()) {
-            const [sh, sm] = startStr.split(':').map(Number);
-            const endMin = sh * 60 + sm + slotMinutes;
-            const endStr = pad(Math.floor(endMin / 60)) + ':' + pad(endMin % 60);
-
-            try {
-                await api('POST', '/api/admin/slots/single', {
-                    date: date,
-                    startTime: startStr + ':00',
-                    endTime: endStr + ':00',
-                    capacity: capacity
-                });
-                created++;
-            } catch (e) {
-                failed.push(startStr + ' (' + e.message + ')');
+        for (const date of targetDates) {
+            for (const startStr of [...selectedTimes].sort()) {
+                const [sh, sm] = startStr.split(':').map(Number);
+                const endMin = sh * 60 + sm + slotMinutes;
+                const endStr = pad(Math.floor(endMin / 60)) + ':' + pad(endMin % 60);
+                try {
+                    const res = await api('POST', '/api/admin/slots/single', {
+                        date, startTime: startStr + ':00', endTime: endStr + ':00', capacity
+                    });
+                    // 바로 공개 옵션
+                    if (autoActivate && res && res.id) {
+                        try { await api('PATCH', '/api/admin/slots/' + res.id + '/activate'); } catch(_) {}
+                    }
+                    created++;
+                } catch (e) {
+                    failed.push(date + ' ' + startStr + ' (' + e.message + ')');
+                }
             }
         }
 
         if (created > 0) {
-            showMessage('msg', created + '개의 시간대를 만들었어요. "시간대 관리"에서 공개해 주세요.', 'ok');
+            const msg = currentDateMode === 'single'
+                ? created + '개의 시간대를 만들었어요.'
+                : targetDates.length + '일 × ' + selectedTimes.size + '타임 = ' + created + '개 시간대를 만들었어요.';
+            showMessage('msg', msg + ' "시간대 관리"에서 공개해 주세요.', 'ok');
             selectedTimes.clear();
             renderTimeGrid();
-            document.getElementById('mDate').value = date;
+            const lastDate = targetDates[targetDates.length - 1];
+            document.getElementById('mDate').value = lastDate;
             if (!document.getElementById('manageSlotBody').classList.contains('open')) {
                 toggleSection('manageSlot');
             }
             loadAdminSlots();
             loadDashboard();
+            loadDiary();
         }
         if (failed.length > 0) {
-            showMessage('msg', '일부 실패: ' + failed.join(', '), 'error');
+            showMessage('msg', '일부 실패 (' + failed.length + '건): ' + failed.slice(0,3).join(', ') + (failed.length > 3 ? ' ...' : ''), 'error');
         }
     }
 

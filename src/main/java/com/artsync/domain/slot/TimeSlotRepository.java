@@ -14,4 +14,7 @@ public interface TimeSlotRepository extends JpaRepository<TimeSlot, Long> {
 
     /** 회원용: 특정 날짜의 활성화된 슬롯만 */
     List<TimeSlot> findBySlotDateAndActiveTrueOrderByStartTime(LocalDate slotDate);
+
+    /** 사장님용: 날짜 범위의 모든 슬롯 (월별 다이어리용) */
+    List<TimeSlot> findBySlotDateBetweenOrderBySlotDateAscStartTimeAsc(LocalDate from, LocalDate to);
 }

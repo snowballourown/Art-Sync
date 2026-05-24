@@ -124,6 +124,12 @@ public class TimeSlotService {
         timeSlotRepository.delete(slot);
     }
 
+
+    /** 사장님용: 날짜 범위의 모든 슬롯 (월별 다이어리용) */
+    public List<TimeSlot> getSlotsForAdminBetween(LocalDate from, LocalDate to) {
+        return timeSlotRepository.findBySlotDateBetweenOrderBySlotDateAscStartTimeAsc(from, to);
+    }
+
     /** 사장님용: 특정 날짜의 모든 슬롯 (활성/비활성 포함, FR-11) */
     public List<TimeSlot> getSlotsForAdmin(LocalDate date) {
         return timeSlotRepository.findBySlotDateOrderByStartTime(date);

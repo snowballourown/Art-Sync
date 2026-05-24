@@ -19,6 +19,17 @@
         <div class="logo-sub">Art-Sync</div>
     </div>
 
+    <!-- 이미 로그인된 경우 배너 -->
+    <div id="alreadyLoginBanner" style="display:none;background:#f0f8f0;border:1.5px solid #9dd9bb;border-radius:10px;padding:14px 16px;margin-bottom:16px;">
+        <div style="font-size:15px;color:#1f6b41;font-weight:bold;margin-bottom:8px;">
+            ✅ <span id="alreadyName"></span> (<span id="alreadyRole"></span>) 로 로그인되어 있어요
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="btn btn-green btn-small" id="alreadyGoBtn">내 페이지로 이동</button>
+            <button class="btn btn-sub btn-small" onclick="doLogoutAndStay()">로그아웃 후 다른 계정으로</button>
+        </div>
+    </div>
+
     <div class="tabs">
         <button id="tabLogin" class="active" onclick="switchTab('login')">로그인</button>
         <button id="tabSignup" onclick="switchTab('signup')">회원가입</button>
@@ -52,12 +63,19 @@
 
 <script src="app.js"></script>
 <script>
-    // 이미 로그인되어 있으면 알맞은 페이지로 이동
+    // 이미 로그인된 경우 — 현재 계정 배너 표시 (자동 리다이렉트 제거)
     (async function () {
         try {
             const user = await api('GET', '/api/auth/me');
-            location.href = (user.role === 'ADMIN') ? 'admin.html' : 'member.html';
-        } catch (e) { /* 로그인 안 됨 */ }
+            // 이미 로그인됨 → 상단 배너로 안내, 로그인 폼은 그대로 유지
+            const banner = document.getElementById('alreadyLoginBanner');
+            document.getElementById('alreadyName').textContent = user.name;
+            document.getElementById('alreadyRole').textContent = user.role === 'ADMIN' ? '사장님' : '회원';
+            document.getElementById('alreadyGoBtn').onclick = () => {
+                location.href = (user.role === 'ADMIN') ? 'admin.html' : 'member.html';
+            };
+            banner.style.display = 'block';
+        } catch (e) { /* 로그인 안 됨 — 정상적으로 폼 표시 */ }
     })();
 
     function switchTab(which) {
@@ -101,6 +119,12 @@
         } catch (e) {
             showMessage('msg', e.message, 'error');
         }
+    }
+
+    async function doLogoutAndStay() {
+        try { await api('POST', '/api/auth/logout'); } catch(e) {}
+        document.getElementById('alreadyLoginBanner').style.display = 'none';
+        showMessage('msg', '로그아웃됐어요. 다른 계정으로 로그인해 주세요.', 'ok');
     }
 
     document.getElementById('loginPw').addEventListener('keyup', function (e) {
