@@ -28,30 +28,54 @@
 
     <div id="msg" class="msg"></div>
 
-    <!-- 📅 내 예약 월별 다이어리 -->
+    <!-- 📅 통합 달력 (예약 가능 + 내 예약) -->
     <div class="card">
-        <div class="collapsible-header" onclick="toggleMemberDiary()">
-            <span class="card-title">📅 내 예약 달력</span>
-            <span id="memberDiaryToggleIcon" class="toggle-icon">▼</span>
+        <div class="cal-toggle-bar">
+            <button class="cal-toggle-btn active" id="toggleAvail" onclick="switchCalTab(0)">📅 예약 가능 달력</button>
+            <button class="cal-toggle-btn" id="toggleMine" onclick="switchCalTab(1)">📌 내 예약 달력</button>
         </div>
-        <div id="memberDiaryBody" class="collapsible-body open">
-            <div class="cal-nav">
-                <button class="btn btn-sub btn-small" onclick="moveMemberMonth(-1)">‹ 이전</button>
-                <span id="memberMonthLabel" class="cal-month-label"></span>
-                <button class="btn btn-sub btn-small" onclick="moveMemberMonth(1)">다음 ›</button>
-            </div>
-            <div id="memberCalGrid"></div>
-            <div id="memberDayDetail" class="day-detail-panel" style="display:none;">
-                <div class="day-detail-header">
-                    <span id="memberDayTitle" class="day-detail-title-text"></span>
-                    <button class="btn-close" onclick="closeMemberDayDetail()">✕</button>
+        <div class="cal-slide-outer">
+            <div class="cal-slide-track" id="calSlideTrack">
+
+                <!-- Pane 0: 예약 가능 달력 -->
+                <div class="cal-pane">
+                    <div class="cal-nav">
+                        <button class="btn btn-sub btn-small" onclick="moveAvailMonth(-1)">‹ 이전</button>
+                        <span id="availMonthLabel" class="cal-month-label"></span>
+                        <button class="btn btn-sub btn-small" onclick="moveAvailMonth(1)">다음 ›</button>
+                    </div>
+                    <div id="availCalGrid"></div>
+                    <div id="availDayDetail" class="day-detail-panel" style="display:none;">
+                        <div class="day-detail-header">
+                            <span id="availDayTitle" class="day-detail-title-text"></span>
+                            <button class="btn-close" onclick="closeAvailDayDetail()">✕</button>
+                        </div>
+                        <div id="availDayContent" class="day-detail-content"></div>
+                    </div>
                 </div>
-                <div id="memberDayContent" class="day-detail-content"></div>
+
+                <!-- Pane 1: 내 예약 달력 -->
+                <div class="cal-pane">
+                    <div class="cal-nav">
+                        <button class="btn btn-sub btn-small" onclick="moveMemberMonth(-1)">‹ 이전</button>
+                        <span id="memberMonthLabel" class="cal-month-label"></span>
+                        <button class="btn btn-sub btn-small" onclick="moveMemberMonth(1)">다음 ›</button>
+                    </div>
+                    <div id="memberCalGrid"></div>
+                    <div id="memberDayDetail" class="day-detail-panel" style="display:none;">
+                        <div class="day-detail-header">
+                            <span id="memberDayTitle" class="day-detail-title-text"></span>
+                            <button class="btn-close" onclick="closeMemberDayDetail()">✕</button>
+                        </div>
+                        <div id="memberDayContent" class="day-detail-content"></div>
+                    </div>
+                </div>
+
             </div>
         </div>
     </div>
 
-    <!-- ① 내 예약 현황 (가장 먼저) -->
+    <!-- 내 예약 현황 -->
     <div class="card">
         <div class="card-header">
             <span class="card-title">📌 내 예약 현황</span>
@@ -59,30 +83,22 @@
         </div>
         <div id="myReservations"></div>
     </div>
-
-    <!-- ② 예약하기 -->
-    <div class="card">
-        <div class="card-header">
-            <span class="card-title">📅 예약하기</span>
-        </div>
-        <div class="date-row">
-            <input type="date" id="date" onchange="onDateChange()">
-            <button class="btn btn-sub btn-small" onclick="loadSlots()">시간대 보기</button>
-        </div>
-        <div id="dateWarningMsg" class="date-warning" style="display:none;"></div>
-        <div id="slotList"></div>
-    </div>
 </div>
 
 <script src="app.js"></script>
 <script>
 
     /* ══════════════════════════════════════════
-       📅 내 예약 달력
+       🗓 통합 달력 — 슬라이드 탭
     ══════════════════════════════════════════ */
-    let memberDiaryYear  = new Date().getFullYear();
-    let memberDiaryMonth = new Date().getMonth() + 1;
-    let memberAllRes     = [];  // /api/reservations/me 전체 캐시
+    let currentCalTab = 0;
+
+    function switchCalTab(idx) {
+        currentCalTab = idx;
+        document.getElementById('calSlideTrack').style.transform = 'translateX(-' + (idx * 100) + '%)';
+        document.getElementById('toggleAvail').classList.toggle('active', idx === 0);
+        document.getElementById('toggleMine').classList.toggle('active', idx === 1);
+    }
 
     function localDateIsoM(d) {
         return d.getFullYear() + '-'
@@ -90,12 +106,176 @@
             + String(d.getDate()).padStart(2, '0');
     }
 
-    function toggleMemberDiary() {
-        const body = document.getElementById('memberDiaryBody');
-        const icon = document.getElementById('memberDiaryToggleIcon');
-        const open = body.classList.toggle('open');
-        icon.style.transform = open ? '' : 'rotate(-90deg)';
+    /* ── 예약 가능 달력 ── */
+    let availDiaryYear   = new Date().getFullYear();
+    let availDiaryMonth  = new Date().getMonth() + 1;
+    let selectedAvailDate = null;
+
+    function moveAvailMonth(delta) {
+        availDiaryMonth += delta;
+        if (availDiaryMonth > 12) { availDiaryMonth = 1; availDiaryYear++; }
+        if (availDiaryMonth < 1)  { availDiaryMonth = 12; availDiaryYear--; }
+        selectedAvailDate = null;
+        closeAvailDayDetail();
+        renderAvailCalendar();
     }
+
+    async function renderAvailCalendar() {
+        const monthLabel = availDiaryYear + '년 ' + availDiaryMonth + '월';
+        document.getElementById('availMonthLabel').textContent = monthLabel;
+
+        const firstDow    = new Date(availDiaryYear, availDiaryMonth - 1, 1).getDay();
+        const daysInMonth = new Date(availDiaryYear, availDiaryMonth, 0).getDate();
+        const todayStr    = localDateIsoM(new Date());
+
+        // 로딩 표시
+        document.getElementById('availCalGrid').innerHTML =
+            '<div class="empty" style="padding:32px 0;">📅 예약 현황을 불러오는 중...</div>';
+
+        // 미래 날짜 슬롯 일괄 조회 (데이터 먼저)
+        const futureDates = [];
+        for (let d = 1; d <= daysInMonth; d++) {
+            const ds = availDiaryYear + '-'
+                + String(availDiaryMonth).padStart(2, '0') + '-'
+                + String(d).padStart(2, '0');
+            if (ds > todayStr) futureDates.push(ds);
+        }
+
+        const slotMap = {};
+        await Promise.all(futureDates.map(async dateStr => {
+            try {
+                const slots = await api('GET', '/api/slots?date=' + dateStr);
+                slotMap[dateStr] = slots.some(s => s.status === 'AVAILABLE' && s.remaining > 0);
+            } catch (e) {
+                slotMap[dateStr] = false;
+            }
+        }));
+
+        // 데이터 준비 완료 후 한 번에 렌더
+        const DOW_LABELS = ['일','월','화','수','목','금','토'];
+        let html = '<div class="cal-header-row">'
+            + DOW_LABELS.map(d => '<div class="cal-hcell">' + d + '</div>').join('')
+            + '</div><div class="cal-body">';
+
+        for (let i = 0; i < firstDow; i++) html += '<div class="cal-cell empty"></div>';
+
+        for (let d = 1; d <= daysInMonth; d++) {
+            const dateStr = availDiaryYear + '-'
+                + String(availDiaryMonth).padStart(2, '0') + '-'
+                + String(d).padStart(2, '0');
+            const isToday = dateStr === todayStr;
+            const isPast  = dateStr <= todayStr;
+
+            let cls = 'cal-cell';
+            if (isPast) {
+                cls += ' cal-past';
+            } else {
+                cls += slotMap[dateStr] ? ' cal-has-slots' : ' cal-no-slots';
+            }
+            if (isToday) cls += ' cal-today';
+
+            const clickAttr = (isPast || !slotMap[dateStr])
+                ? ''
+                : ' onclick="openAvailDayDetail(\'' + dateStr + '\')"';
+            html += '<div class="' + cls + '" id="avail-cell-' + dateStr + '"' + clickAttr + '>'
+                + '<div class="cal-day-num">' + d + '</div>'
+                + '</div>';
+        }
+
+        const filled = firstDow + daysInMonth;
+        const rem = filled % 7 === 0 ? 0 : 7 - (filled % 7);
+        for (let i = 0; i < rem; i++) html += '<div class="cal-cell empty"></div>';
+        html += '</div>';
+
+        html += '<div class="cal-legend">'
+            + '<span class="legend-item"><span class="legend-dot ld-avail"></span>예약가능</span>'
+            + '<span class="legend-item"><span class="legend-dot ld-unavail"></span>예약불가</span>'
+            + '<span class="legend-item"><span class="legend-dot ld-selected"></span>선택일자</span>'
+            + '</div>';
+
+        document.getElementById('availCalGrid').innerHTML = html;
+    }
+
+    async function openAvailDayDetail(dateStr) {
+        // 이전 선택 해제
+        if (selectedAvailDate) {
+            const prev = document.getElementById('avail-cell-' + selectedAvailDate);
+            if (prev) prev.classList.remove('cal-selected');
+        }
+        selectedAvailDate = dateStr;
+        const cell = document.getElementById('avail-cell-' + dateStr);
+        if (cell) cell.classList.add('cal-selected');
+        const panel   = document.getElementById('availDayDetail');
+        const titleEl = document.getElementById('availDayTitle');
+        const bodyEl  = document.getElementById('availDayContent');
+
+        const [y, m, d] = dateStr.split('-').map(Number);
+        const DOW_KO = ['일','월','화','수','목','금','토'];
+        const dow = new Date(y, m - 1, d).getDay();
+        titleEl.textContent = y + '년 ' + m + '월 ' + d + '일 (' + DOW_KO[dow] + ')';
+
+        bodyEl.innerHTML = '<div class="empty">불러오는 중...</div>';
+        panel.style.display = 'block';
+
+        try {
+            const [slots, myRes] = await Promise.all([
+                api('GET', '/api/slots?date=' + dateStr),
+                api('GET', '/api/reservations/me')
+            ]);
+            const reservedIds = new Set(
+                myRes.filter(r => r.status === 'REQUESTED' || r.status === 'CONFIRMED').map(r => r.slotId)
+            );
+
+            if (slots.length === 0) {
+                bodyEl.innerHTML = '<div class="empty">이 날짜에 열린 시간대가 없어요.</div>';
+                return;
+            }
+
+            bodyEl.innerHTML = slots.map(slot => {
+                const alreadyReserved = reservedIds.has(slot.id);
+                let button;
+                if (alreadyReserved) {
+                    button = '<button class="btn btn-sub btn-small" disabled style="opacity:1;color:#2e8b57;cursor:default;margin-top:6px;">✅ 예약 신청 완료</button>';
+                } else if (slot.status === 'AVAILABLE' && slot.remaining > 0) {
+                    button = '<button class="btn btn-green btn-small" style="margin-top:6px;" onclick="reserveFromCalendar(' + slot.id + ',\'' + dateStr + '\')">예약 신청하기</button>';
+                } else {
+                    button = '<button class="btn btn-gray btn-small" style="margin-top:6px;" disabled>예약 불가</button>';
+                }
+                return '<div class="item" style="margin-bottom:8px;">'
+                    + '<div class="time">' + formatTime(slot.startTime) + ' ~ ' + formatTime(slot.endTime) + '</div>'
+                    + '<div class="meta">'
+                    + '<span class="badge-status ' + slotStatusClass(slot.status) + '">' + slotStatusLabel(slot.status) + '</span>'
+                    + '<span style="font-size:13px;color:#888;">남은 자리 ' + slot.remaining + '/' + slot.capacity + '명</span>'
+                    + '</div>'
+                    + button
+                    + '</div>';
+            }).join('');
+        } catch (e) {
+            bodyEl.innerHTML = '<div class="empty">' + e.message + '</div>';
+        }
+    }
+
+    function closeAvailDayDetail() {
+        document.getElementById('availDayDetail').style.display = 'none';
+    }
+
+    async function reserveFromCalendar(slotId, dateStr) {
+        if (!confirm('이 시간대로 예약을 신청할까요?\n사장님이 확인 후 알려드려요.')) return;
+        try {
+            await api('POST', '/api/reservations', { slotId: slotId, memo: null });
+            showMessage('msg', '예약을 신청했어요! 사장님 확인을 기다려 주세요.', 'ok');
+            await openAvailDayDetail(dateStr);  // 상세 패널 갱신
+            loadMemberDiary();
+            loadMyReservations();
+        } catch (e) {
+            showMessage('msg', e.message, 'error');
+        }
+    }
+
+    /* ── 내 예약 달력 ── */
+    let memberDiaryYear  = new Date().getFullYear();
+    let memberDiaryMonth = new Date().getMonth() + 1;
+    let memberAllRes     = [];
 
     function moveMemberMonth(delta) {
         memberDiaryMonth += delta;
@@ -118,13 +298,14 @@
         document.getElementById('memberMonthLabel').textContent =
             memberDiaryYear + '년 ' + memberDiaryMonth + '월';
 
-        // 이번 달 예약만 필터 후 날짜별 그룹화
         const prefix = memberDiaryYear + '-' + String(memberDiaryMonth).padStart(2, '0');
         const resMap = {};
-        memberAllRes.filter(r => r.slotDate && r.slotDate.startsWith(prefix)).forEach(r => {
-            if (!resMap[r.slotDate]) resMap[r.slotDate] = [];
-            resMap[r.slotDate].push(r);
-        });
+        memberAllRes.filter(r => r.slotDate && r.slotDate.startsWith(prefix))
+            .sort((a, b) => (a.startTime || '').localeCompare(b.startTime || ''))
+            .forEach(r => {
+                if (!resMap[r.slotDate]) resMap[r.slotDate] = [];
+                resMap[r.slotDate].push(r);
+            });
 
         const firstDow    = new Date(memberDiaryYear, memberDiaryMonth - 1, 1).getDay();
         const daysInMonth = new Date(memberDiaryYear, memberDiaryMonth, 0).getDate();
@@ -151,7 +332,6 @@
 
             if (resList.length > 0) {
                 const hasConfirmed = resList.some(r => r.status === 'CONFIRMED');
-                const hasRequested = resList.some(r => r.status === 'REQUESTED');
                 cls += hasConfirmed ? ' cal-has-res' : ' cal-has-pending';
 
                 resList.slice(0, 2).forEach(r => {
@@ -185,8 +365,9 @@
         const dow = new Date(y, m - 1, d).getDay();
         titleEl.textContent = y + '년 ' + m + '월 ' + d + '일 (' + DOW_KO[dow] + ')';
 
-        const prefix = memberDiaryYear + '-' + String(memberDiaryMonth).padStart(2, '0');
-        const resList = memberAllRes.filter(r => r.slotDate === dateStr);
+        const resList = memberAllRes
+            .filter(r => r.slotDate === dateStr)
+            .sort((a, b) => (a.startTime || '').localeCompare(b.startTime || ''));
 
         if (resList.length === 0) {
             bodyEl.innerHTML = '<div class="empty">이 날짜의 예약 내역이 없어요.</div>';
@@ -217,9 +398,8 @@
         try {
             await api('DELETE', '/api/reservations/' + id);
             showMessage('msg', '예약을 취소했어요.', 'ok');
-            await loadMemberDiary();   // 달력 갱신
-            loadMyReservations();      // 목록도 갱신
-            loadSlots();
+            await loadMemberDiary();
+            loadMyReservations();
             closeMemberDayDetail();
         } catch (e) {
             showMessage('msg', e.message, 'error');
@@ -227,44 +407,19 @@
     }
 
     let currentUser = null;
-    let myReservedSlotIds = new Set();  // 이미 신청/확정된 슬롯 ID 목록
 
     (async function init() {
         currentUser = await requireLogin('MEMBER');
         if (!currentUser) return;
         document.getElementById('hello').innerHTML = '<strong>' + currentUser.name + '</strong> 님, 안녕하세요!';
 
-        // 기본 날짜 = 내일 (오늘은 마감이라 예약 불가)
-        const t = new Date();
-        t.setDate(t.getDate() + 1);
-        const tomorrow = t.getFullYear() + '-' + String(t.getMonth() + 1).padStart(2, '0')
-            + '-' + String(t.getDate()).padStart(2, '0');
-
-        const dateInput = document.getElementById('date');
-        dateInput.value = tomorrow;
-        dateInput.min = tomorrow;  // 오늘 이전 날짜 선택 불가
-
+        renderAvailCalendar();
         loadMemberDiary();
         loadMyReservations();
-        loadSlots();
         loadNotifications();
     })();
 
-    function onDateChange() {
-        const date = document.getElementById('date').value;
-        const today = todayIso();
-        const warn = document.getElementById('dateWarningMsg');
-        if (date <= today) {
-            warn.textContent = '⚠️ 오늘 및 이전 날짜는 예약 마감이에요. 내일 이후 날짜를 선택해 주세요.';
-            warn.style.display = 'block';
-            document.getElementById('slotList').innerHTML = '';
-        } else {
-            warn.style.display = 'none';
-            loadSlots();
-        }
-    }
-
-    /* ── ① 내 예약 현황 ── */
+    /* ── 내 예약 현황 ── */
     async function loadMyReservations() {
         const box = document.getElementById('myReservations');
         box.innerHTML = '<div class="empty">불러오는 중...</div>';
@@ -324,69 +479,6 @@
             await api('DELETE', '/api/reservations/' + id);
             showMessage('msg', '예약을 취소했어요.', 'ok');
             loadMemberDiary();
-            loadMyReservations();
-            loadSlots();
-        } catch (e) {
-            showMessage('msg', e.message, 'error');
-        }
-    }
-
-    /* ── ② 예약하기 ── */
-    async function loadSlots() {
-        const date = document.getElementById('date').value;
-        if (!date) return;
-        const box = document.getElementById('slotList');
-        box.innerHTML = '<div class="empty">불러오는 중...</div>';
-        try {
-            const [slots, myRes] = await Promise.all([
-                api('GET', '/api/slots?date=' + date),
-                api('GET', '/api/reservations/me')
-            ]);
-            // 현재 사용자가 이미 신청/확정한 슬롯 ID 추적
-            myReservedSlotIds = new Set(
-                myRes.filter(r => r.status === 'REQUESTED' || r.status === 'CONFIRMED')
-                     .map(r => r.slotId)
-            );
-            if (slots.length === 0) {
-                box.innerHTML = '<div class="empty">이 날짜에 열린 시간대가 없어요.</div>';
-                return;
-            }
-            box.innerHTML = slots.map(renderSlot).join('');
-        } catch (e) {
-            box.innerHTML = '<div class="empty">' + e.message + '</div>';
-        }
-    }
-
-    function renderSlot(slot) {
-        const alreadyReserved = myReservedSlotIds.has(slot.id);
-        let button;
-        if (alreadyReserved) {
-            button = '<button class="btn btn-sub" disabled style="opacity:1;color:#2e8b57;cursor:default;">✅ 예약 신청 완료</button>';
-        } else if (slot.status === 'AVAILABLE' && slot.remaining > 0) {
-            button = '<button class="btn btn-green" onclick="reserve(' + slot.id + ')">예약 신청하기</button>';
-        } else {
-            button = '<button class="btn btn-gray" disabled>예약 불가</button>';
-        }
-
-        return '<div class="slot-card">'
-            + '<div class="slot-card-header">'
-            + '<span class="slot-time">' + formatTime(slot.startTime) + ' ~ ' + formatTime(slot.endTime) + '</span>'
-            + '<span class="slot-meta">'
-            + '<span class="slot-count">남은 자리 ' + slot.remaining + ' / ' + slot.capacity + '명</span>'
-            + '<span class="badge-status ' + slotStatusClass(slot.status) + '">' + slotStatusLabel(slot.status) + '</span>'
-            + '</span>'
-            + '</div>'
-            + '<div class="slot-body">' + button + '</div>'
-            + '</div>';
-    }
-
-    async function reserve(slotId) {
-        if (!confirm('이 시간대로 예약을 신청할까요?\n사장님이 확인 후 알려드려요.')) return;
-        try {
-            await api('POST', '/api/reservations', { slotId: slotId, memo: null });
-            showMessage('msg', '예약을 신청했어요! 사장님 확인을 기다려 주세요.', 'ok');
-            loadMemberDiary();
-            loadSlots();
             loadMyReservations();
         } catch (e) {
             showMessage('msg', e.message, 'error');

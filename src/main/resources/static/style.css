@@ -500,6 +500,83 @@ button { font-family: inherit; }
     border-left-color: var(--red);
 }
 
+/* ── 달력 셀 호버 팝업 ── */
+.cal-hover-popup {
+    display: none;
+    position: absolute;
+    top: calc(100% + 8px);   /* 셀 아래쪽으로 표시 */
+    left: 50%;
+    transform: translateX(-50%);
+    background: #fff;
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    padding: 8px 12px;
+    z-index: 50;
+    min-width: 180px;
+    max-width: 300px;        /* 이름 여러 개 가로로 표시될 공간 */
+    box-shadow: 0 6px 18px rgba(0,0,0,0.14);
+    pointer-events: none;
+}
+/* 팝업 위쪽 삼각형 화살표 (셀을 가리킴) */
+.cal-hover-popup::after {
+    content: '';
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 6px solid transparent;
+    border-bottom-color: var(--border);
+}
+.cal-hover-popup::before {
+    content: '';
+    position: absolute;
+    bottom: calc(100% - 1px);
+    left: 50%;
+    transform: translateX(-50%);
+    border: 6px solid transparent;
+    border-bottom-color: #fff;
+    z-index: 1;
+}
+.cal-cell:hover { z-index: 30; }
+.cal-cell:hover .cal-hover-popup { display: block; }
+
+.popup-header {
+    font-size: 11px;
+    font-weight: bold;
+    color: var(--brown);
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 5px;
+    margin-bottom: 5px;
+    text-align: center;
+}
+.popup-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    padding: 3px 0;
+    border-bottom: 1px solid #f5f0ea;
+}
+.popup-row:last-child { border-bottom: none; }
+.popup-time {
+    font-weight: bold;
+    color: var(--brown-dark);
+    min-width: 38px;
+    flex-shrink: 0;
+}
+.popup-names {
+    display: flex;
+    flex-direction: row;     /* 가로 나열 */
+    flex-wrap: wrap;
+    gap: 4px 8px;
+    align-items: center;
+}
+.popup-name {
+    color: var(--text);
+    white-space: nowrap;
+    font-size: 12px;
+}
+
 /* ── 시간 그리드 (사장님 슬롯 선택기) ── */
 .time-section-label {
     font-size: 14px;
@@ -607,6 +684,124 @@ button { font-family: inherit; }
 }
 
 /* ============================================
+   통합 달력 슬라이드 토글
+   ============================================ */
+
+.cal-toggle-bar {
+    display: flex;
+    background: var(--brown-light);
+    border-radius: 999px;
+    padding: 4px;
+    gap: 4px;
+    margin-bottom: 16px;
+    border: 1.5px solid var(--border);
+}
+.cal-toggle-btn {
+    flex: 1;
+    padding: 9px 12px;
+    border-radius: 999px;
+    border: none;
+    background: transparent;
+    font-size: 14px;
+    font-weight: bold;
+    cursor: pointer;
+    color: var(--brown);
+    transition: background 0.2s, color 0.2s;
+    font-family: inherit;
+}
+.cal-toggle-btn.active {
+    background: var(--brown);
+    color: #fff;
+    box-shadow: 0 2px 6px rgba(107,79,58,0.25);
+}
+
+.cal-slide-outer {
+    overflow: hidden;
+}
+.cal-slide-track {
+    display: flex;
+    transition: transform 0.32s cubic-bezier(.4,0,.2,1);
+}
+.cal-pane {
+    min-width: 100%;
+}
+
+/* 지난 날짜 (예약 불가) */
+.cal-cell.cal-past {
+    background: #f5f0ea;
+    cursor: default;
+    opacity: 0.55;
+}
+.cal-cell.cal-past:hover {
+    border-color: var(--border);
+    box-shadow: none;
+}
+
+/* 예약 가능한 날 — 진한 버건디 */
+.cal-cell.cal-has-slots {
+    background: #7d1c1c;
+    border-color: #6a1515;
+    cursor: pointer;
+}
+.cal-cell.cal-has-slots .cal-day-num {
+    color: #fff;
+    font-size: 14px;
+}
+.cal-cell.cal-has-slots:hover {
+    background: #6a1515;
+    box-shadow: 0 2px 8px rgba(125,28,28,0.35);
+}
+
+/* 예약 불가한 날 — 흰 배경 */
+.cal-cell.cal-no-slots {
+    background: #fff;
+    border-color: var(--border);
+    cursor: default;
+    opacity: 0.75;
+}
+.cal-cell.cal-no-slots:hover {
+    box-shadow: none;
+    border-color: var(--border);
+}
+
+/* 선택된 날 — 흰 배경 + 갈색 테두리 */
+.cal-cell.cal-selected {
+    background: #fff !important;
+    border: 2.5px solid var(--brown) !important;
+    box-shadow: 0 2px 8px rgba(107,79,58,0.2) !important;
+}
+.cal-cell.cal-selected .cal-day-num {
+    color: var(--brown) !important;
+    font-weight: bold;
+}
+
+/* 범례 */
+.cal-legend {
+    display: flex;
+    gap: 16px;
+    justify-content: center;
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+}
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--text-sub);
+}
+.legend-dot {
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+    flex-shrink: 0;
+}
+.legend-dot.ld-avail    { background: #7d1c1c; }
+.legend-dot.ld-unavail  { background: #fff; border: 1.5px solid var(--border); }
+.legend-dot.ld-selected { background: #fff; border: 2px solid var(--brown); }
+
+/* ============================================
    월별 다이어리 캘린더 스타일
    ============================================ */
 
@@ -677,10 +872,7 @@ button { font-family: inherit; }
     border-color: var(--brown);
     background: #fdf9f5;
 }
-.cal-cell.cal-has-slots {
-    background: #f9fffe;
-    border-color: #c3e8df;
-}
+/* cal-has-slots 색상은 통합 달력 섹션에서 정의 */
 .cal-cell.cal-has-res {
     background: #f3fff7;
     border-color: #9dd9bb;

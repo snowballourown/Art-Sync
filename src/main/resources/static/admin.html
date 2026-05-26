@@ -251,7 +251,7 @@
                     const hasPending = summary.reservations.some(r => r.status === 'REQUESTED');
                     cls += hasPending ? ' cal-has-pending' : ' cal-has-res';
 
-                    // 이름별 예약 시간 수집 (툴팁용)
+                    // 이름별 예약 시간 수집 (셀 내 이름 태그)
                     const nameMap = {};
                     summary.reservations.forEach(r => {
                         const nm = r.memberName || ('회원#' + r.memberId);
@@ -259,12 +259,37 @@
                         nameMap[nm].push(formatTime(r.startTime));
                     });
                     const names = Object.keys(nameMap);
-                    names.slice(0, 3).forEach(nm => {
-                        const tooltip = nm + ': ' + nameMap[nm].join(', ');
-                        inner += '<div class="cal-name" data-tooltip="' + tooltip + '">' + nm + '</div>';
+                    names.slice(0, 2).forEach(nm => {
+                        inner += '<div class="cal-name">' + nm + '</div>';
                     });
-                    if (names.length > 3)
-                        inner += '<div class="cal-more">+' + (names.length - 3) + '명 더</div>';
+                    if (names.length > 2)
+                        inner += '<div class="cal-more">+' + (names.length - 2) + '명 더</div>';
+
+                    // 호버 팝업 — 시간별 그룹화 후 이름 가로 나열
+                    const timeGroups = {};
+                    [...summary.reservations]
+                        .sort((a, b) => (a.startTime || '').localeCompare(b.startTime || ''))
+                        .forEach(r => {
+                            const t = formatTime(r.startTime);
+                            if (!timeGroups[t]) timeGroups[t] = [];
+                            timeGroups[t].push(r);
+                        });
+                    let popupRows = Object.entries(timeGroups).map(([time, rs]) => {
+                        const nameSpans = rs.map(r => {
+                            const nm   = r.memberName || ('회원#' + r.memberId);
+                            const icon = r.status === 'CONFIRMED' ? '✅' : '⏳';
+                            return '<span class="popup-name">' + icon + ' ' + nm + '</span>';
+                        }).join('');
+                        return '<div class="popup-row">'
+                            + '<span class="popup-time">' + time + '</span>'
+                            + '<span class="popup-names">' + nameSpans + '</span>'
+                            + '</div>';
+                    }).join('');
+                    inner += '<div class="cal-hover-popup">'
+                        + '<div class="popup-header">📋 예약 현황</div>'
+                        + popupRows
+                        + '</div>';
+
                 } else if (summary.slotCount > 0) {
                     cls += ' cal-has-slots';
                     inner += '<div class="cal-slot-count">' + summary.slotCount + '타임</div>';
