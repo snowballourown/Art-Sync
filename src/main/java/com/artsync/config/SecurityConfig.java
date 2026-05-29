@@ -11,10 +11,11 @@ import org.springframework.security.web.SecurityFilterChain;
  * 보안 설정.
  *
  * 주의: 현재는 개발/학습 단계라 모든 요청을 허용한다.
- * 추후 로그인 기능 구현 시 역할(ADMIN/MEMBER)별 접근 제어를 여기서 추가한다.
- *   - /api/admin/**  → ADMIN 만
- *   - /api/auth/**   → 모두 허용
- *   - 그 외 /api/**  → 로그인 사용자
+ * 권한 제어(공간 운영자 여부)는 서비스 계층에서 SpaceService.requireOwner() 로 수행한다.
+ *   - /api/spaces/**           → 로그인 사용자 (서비스에서 운영자 여부 추가 검증)
+ *   - /api/auth/**             → 모두 허용
+ *   - /api/reservations/**     → 로그인 사용자
+ *   - /api/notifications/**    → 로그인 사용자
  */
 @Configuration
 public class SecurityConfig {

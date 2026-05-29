@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>Art-Sync 시퀀스 다이어그램</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/10.6.1/mermaid.min.js"></script>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #f5f5f5;
+      margin: 0;
+      padding: 32px 24px;
+      color: #111;
+    }
+    h1 { font-size: 22px; margin-bottom: 32px; border-bottom: 2px solid #111; padding-bottom: 10px; }
+    .diagram-section {
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 12px;
+      padding: 28px 32px;
+      margin-bottom: 32px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    }
+    .diagram-section h2 {
+      font-size: 16px;
+      font-weight: bold;
+      margin: 0 0 20px 0;
+      padding-bottom: 10px;
+      border-bottom: 1px solid #eee;
+    }
+    .mermaid { overflow-x: auto; }
+  </style>
+</head>
+<body>
+
+<h1>Art-Sync 시퀀스 다이어그램</h1>
+
+<!-- ① 회원가입 & 로그인 -->
+<div class="diagram-section">
+  <h2>① 회원가입 & 로그인</h2>
+  <div class="mermaid">
+sequenceDiagram
+  actor U as 사용자 (Browser)
+  participant AC as AuthController
+  participant US as UserService
+  participant DB as DB (UserRepository)
+  participant S as Session
+
+  note over U: [회원가입]
+  U->>AC: POST /api/auth/signup<br/>{loginId, password, name, phone}
+  AC->>US: signup(request)
+  US->>DB: existsByLoginId() 중복 확인
+  DB-->>US: false (없음)
+  US->>DB: save(new User)
+  DB-->>US: saved User
+  US-->>AC: 완료
+  AC-->>U: 200 OK
+
+  note over U: 가입 직후 자동 로그인 (Step 1)
+  U->>AC: POST /api/auth/login<br/>{loginId, password, role: PARTICIPANT}
+  AC->>US: login(request)
+  US->>DB: findByLoginId()
+  DB-->>US: User
+  US->>US: 비밀번호 검증
+  US-->>AC: UserResponse (name 포함)
+  AC->>S: 세션에 userId 저장
+  AC-->>U: 200 {name, ...}
+
+  note over U: [2단계 로그인 — 역할 선택]
+  U->>U: 역할 카드 선택 (선생님 / 참여자)
+  U->>AC: POST /api/auth/login<br/>{loginId, password, role: TEACHER}
+  AC->>US: login(request)
+  US-->>AC: UserResponse
+  AC->>S: sessionRole = TEACHER 저장
+  AC-->>U: 200 OK
+  U->>U: redirect → admin.html
+  </div>
+</div>
+
+<!-- ② 슬롯 생성 (선생님) -->
+<div class="diagram-section">
+  <h2>② 슬롯 생성 (선생님)</h2>
+  <div class="mermaid">
+sequenceDiagram
+  actor T as 선생님 (Browser)
+  participant SSC as SpaceSlotController
+  participant TSS as TimeSlotService
+  participant SS as SpaceService
+  participant TSR as TimeSlotRepository
+
+  note over T: 수업(Space) 선택 후 슬롯 등록
+  T->>SSC: POST /api/spaces/{spaceId}/slots<br/>{date, startTime, endTime, capacity}
+  SSC->>TSS: createSlot(userId, spaceId, date, start, end, capacity)
+
+  TSS->>SS: requireOwner(userId, spaceId)
+  SS-->>TSS: 소유자 확인 완료
+
+  alt 시작 >= 종료
+    TSS-->>SSC: BusinessException "시작 시간은 종료 시간보다 빨라야"
+    SSC-->>T: 400 Bad Request
+  end
+
+  TSS->>TSR: countOverlapping(spaceId, date, start, end)
+  TSR-->>TSS: count
+
+  alt count > 0
+    TSS-->>SSC: BusinessException "겹칩니다"
+    SSC-->>T: 400 Bad Request
+  end
+
+  TSS->>TSR: save(new TimeSlot) [active=false]
+  TSR-->>TSS: saved (id)
+  TSS-->>SSC: slotId
+  SSC-->>T: 201 {id}
+
+  note over T: 슬롯 공개 (참가자에게 노출)
+  T->>SSC: PATCH /api/spaces/{spaceId}/slots/{id}/activate
+  SSC->>TSS: activate(userId, spaceId, slotId)
+  TSS->>TSR: slot.activate() [active=true]
+  SSC-->>T: 200 OK
+  </div>
+</div>
+
+<!-- ③ 예약 신청 · 수락 · 거절 -->
+<div class="diagram-section">
+  <h2>③ 예약 신청 · 수락 · 거절</h2>
+  <div class="mermaid">
+sequenceDiagram
+  actor P as 참가자 (Browser)
+  actor T as 선생님 (Browser)
+  participant RC as ReservationController
+  participant SRC as SpaceReservationController
+  participant RS as ReservationService
+  participant TSS as TimeSlotService
+  participant RR as ReservationRepository
+  participant NS as NotificationService
+
+  note over P: [예약 신청]
+  P->>RC: POST /api/reservations<br/>{slotId, memo}
+  RC->>RS: request(slotId, memberId, memo)
+
+  RS->>TSS: getSlot(slotId)
+  TSS-->>RS: TimeSlot
+
+  alt 비공개 슬롯
+    RS-->>RC: BusinessException "아직 공개되지 않은 시간대"
+    RC-->>P: 400
+  end
+  alt 마감 (예약일 전날 23:59 초과)
+    RS-->>RC: BusinessException "예약이 마감되었습니다"
+    RC-->>P: 400
+  end
+  alt 정원 초과
+    RS-->>RC: BusinessException "정원이 모두 찼습니다"
+    RC-->>P: 400
+  end
+  alt 동일 슬롯 중복 신청
+    RS-->>RC: BusinessException "이미 신청한 예약이 있습니다"
+    RC-->>P: 400
+  end
+  alt 같은 날 시간 겹침
+    RS->>RR: countOverlappingForMember()
+    RR-->>RS: count > 0
+    RS-->>RC: BusinessException "겹치는 예약이 이미 있습니다"
+    RC-->>P: 400
+  end
+
+  RS->>RR: save(new Reservation) [REQUESTED]
+  RR-->>RS: reservationId
+  RS->>NS: create(ownerId, RESERVATION_REQUESTED, message)
+  NS-->>T: 알림 저장
+  RS-->>RC: reservationId
+  RC-->>P: 201 {id}
+
+  note over T: [예약 수락]
+  T->>SRC: PATCH /api/spaces/{spaceId}/reservations/{id}/confirm
+  SRC->>RS: confirm(userId, reservationId)
+  RS->>TSS: getSlot(slotId)
+  RS->>NS: requireOwner(userId, spaceId) 확인
+  RS->>RR: countBySlotIdAndStatus(CONFIRMED)
+  alt 정원 초과
+    RS-->>SRC: BusinessException
+    SRC-->>T: 400
+  end
+  RS->>RR: reservation.confirm() [CONFIRMED]
+  RS->>TSS: slot.markFull() (정원 찼을 때)
+  RS->>NS: create(memberId, RESERVATION_CONFIRMED, message)
+  NS-->>P: 알림 저장
+  SRC-->>T: 200 OK
+
+  note over T: [예약 거절]
+  T->>SRC: PATCH /api/spaces/{spaceId}/reservations/{id}/reject<br/>{reason}
+  SRC->>RS: reject(userId, reservationId, reason)
+  RS->>RR: reservation.reject(reason) [REJECTED]
+  RS->>NS: create(memberId, RESERVATION_REJECTED, message)
+  NS-->>P: 알림 저장
+  SRC-->>T: 200 OK
+  </div>
+</div>
+
+<script>
+  mermaid.initialize({ startOnLoad: true, theme: 'neutral', sequence: { actorMargin: 60 } });
+</script>
+</body>
+</html>

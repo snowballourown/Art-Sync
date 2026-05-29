@@ -32,9 +32,9 @@ async function api(method, url, body) {
 async function requireLogin(expectedRole) {
     try {
         const user = await api('GET', '/api/auth/me');
-        if (expectedRole && user.role !== expectedRole) {
-            // 역할이 맞지 않으면 알맞은 페이지로
-            location.href = (user.role === 'ADMIN') ? 'admin.html' : 'member.html';
+        if (expectedRole && user.sessionRole !== expectedRole) {
+            // 세션 역할이 맞지 않으면 알맞은 페이지로
+            location.href = (user.sessionRole === 'TEACHER') ? 'admin.html' : 'member.html';
             return null;
         }
         return user;

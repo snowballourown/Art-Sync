@@ -17,6 +17,10 @@ public class TimeSlot {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    /** 이 슬롯이 속한 공간 */
+    @Column(nullable = false)
+    private Long spaceId;
+
     @Column(nullable = false)
     private LocalDate slotDate;
 
@@ -49,8 +53,9 @@ public class TimeSlot {
         // JPA 기본 생성자
     }
 
-    public TimeSlot(LocalDate slotDate, LocalTime startTime, LocalTime endTime,
+    public TimeSlot(Long spaceId, LocalDate slotDate, LocalTime startTime, LocalTime endTime,
                     int capacity, Long createdBy) {
+        this.spaceId = spaceId;
         this.slotDate = slotDate;
         this.startTime = startTime;
         this.endTime = endTime;
@@ -99,6 +104,10 @@ public class TimeSlot {
 
     public Long getId() {
         return id;
+    }
+
+    public Long getSpaceId() {
+        return spaceId;
     }
 
     public LocalDate getSlotDate() {

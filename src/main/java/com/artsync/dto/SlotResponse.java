@@ -12,6 +12,7 @@ import java.time.LocalTime;
  */
 public record SlotResponse(
         Long id,
+        Long spaceId,
         LocalDate slotDate,
         LocalTime startTime,
         LocalTime endTime,
@@ -25,6 +26,7 @@ public record SlotResponse(
         long remaining = Math.max(0, slot.getCapacity() - confirmedCount);
         return new SlotResponse(
                 slot.getId(),
+                slot.getSpaceId(),
                 slot.getSlotDate(),
                 slot.getStartTime(),
                 slot.getEndTime(),

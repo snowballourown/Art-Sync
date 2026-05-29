@@ -7,6 +7,7 @@ import com.artsync.domain.reservation.Reservation;
 import com.artsync.domain.reservation.ReservationRepository;
 import com.artsync.domain.reservation.ReservationStatus;
 import com.artsync.domain.slot.TimeSlot;
+import com.artsync.domain.space.Space;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -15,8 +16,8 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 /**
- * 예약 요청/수락/거절/취소 비즈니스 로직 — 시스템의 핵심.
- * 대응 요구사항: FR-05 ~ FR-10, FR-12 / 비즈니스 규칙 BR-01 ~ BR-04
+ * 예약 요청/수락/거절/취소 비즈니스 로직.
+ * 수락·거절 권한은 "해당 슬롯이 속한 Space 의 운영자" 여부로 판단한다.
  */
 @Service
 @Transactional(readOnly = true)
@@ -27,23 +28,23 @@ public class ReservationService {
 
     private final ReservationRepository reservationRepository;
     private final TimeSlotService timeSlotService;
+    private final SpaceService spaceService;
     private final NotificationService notificationService;
-    private final UserService userService;
 
     public ReservationService(ReservationRepository reservationRepository,
                               TimeSlotService timeSlotService,
-                              NotificationService notificationService,
-                              UserService userService) {
+                              SpaceService spaceService,
+                              NotificationService notificationService) {
         this.reservationRepository = reservationRepository;
         this.timeSlotService = timeSlotService;
+        this.spaceService = spaceService;
         this.notificationService = notificationService;
-        this.userService = userService;
     }
 
     /**
-     * 회원의 예약 요청 (FR-05).
+     * 참가자의 예약 요청.
      * 검증 순서: 공개 여부 → 마감(BR-01) → 정원(BR-02) → 중복 요청.
-     * 성공 시 사장님에게 알림을 생성한다 (FR-06).
+     * 성공 시 공간 운영자에게 알림을 생성한다.
      */
     @Transactional
     public Long request(Long slotId, Long memberId, String memo) {
@@ -67,12 +68,27 @@ public class ReservationService {
             throw new BusinessException("이미 이 시간대에 신청한 예약이 있습니다.");
         }
 
+        // 같은 날 다른 슬롯과 시간이 겹치는지 확인
+        long overlapping = reservationRepository.countOverlappingForMember(
+                memberId,
+                List.of(ReservationStatus.REQUESTED, ReservationStatus.CONFIRMED),
+                slot.getSlotDate(),
+                slot.getStartTime(),
+                slot.getEndTime());
+        if (overlapping > 0) {
+            throw new BusinessException(
+                    "같은 날 " + slot.getStartTime().toString().substring(0, 5)
+                    + "~" + slot.getEndTime().toString().substring(0, 5)
+                    + " 시간대와 겹치는 예약이 이미 있습니다.");
+        }
+
         Reservation reservation = new Reservation(slotId, memberId, memo);
         Long reservationId = reservationRepository.save(reservation).getId();
 
-        // 사장님에게 알림 (FR-06)
+        // 공간 운영자에게 알림
+        Space space = spaceService.getSpace(slot.getSpaceId());
         notificationService.create(
-                slot.getCreatedBy(),
+                space.getOwnerId(),
                 NotificationType.RESERVATION_REQUESTED,
                 "새 예약 요청이 도착했어요. " + describe(slot),
                 reservationId);
@@ -81,16 +97,18 @@ public class ReservationService {
     }
 
     /**
-     * 사장님의 예약 최종 수락 (FR-07).
-     * 마감(BR-03)·정원(BR-02)을 다시 검증한 뒤 확정하고, 회원에게 알림을 보낸다 (FR-08).
+     * 운영자의 예약 수락.
+     * 해당 슬롯이 속한 Space 의 운영자인지 검증한다.
      */
     @Transactional
-    public void confirm(Long adminId, Long reservationId) {
-        userService.requireAdmin(adminId);
+    public void confirm(Long userId, Long reservationId) {
         Reservation reservation = getReservation(reservationId);
         TimeSlot slot = timeSlotService.getSlot(reservation.getSlotId());
-        LocalDateTime now = LocalDateTime.now();
 
+        // 이 슬롯이 속한 공간의 운영자인지 확인
+        spaceService.requireOwner(userId, slot.getSpaceId());
+
+        LocalDateTime now = LocalDateTime.now();
         if (slot.isClosed(now)) {
             throw new BusinessException("마감된 시간대의 예약은 처리할 수 없습니다.");
         }
@@ -102,12 +120,10 @@ public class ReservationService {
 
         reservation.confirm();
 
-        // 이번 수락으로 정원이 찼다면 슬롯 상태 갱신
         if (confirmedCount + 1 >= slot.getCapacity()) {
             slot.markFull();
         }
 
-        // 회원에게 알림 (FR-08)
         notificationService.create(
                 reservation.getMemberId(),
                 NotificationType.RESERVATION_CONFIRMED,
@@ -116,13 +132,14 @@ public class ReservationService {
     }
 
     /**
-     * 사장님의 예약 거절 (FR-07). 회원에게 거절 사유와 함께 알림을 보낸다 (FR-08).
+     * 운영자의 예약 거절.
      */
     @Transactional
-    public void reject(Long adminId, Long reservationId, String reason) {
-        userService.requireAdmin(adminId);
+    public void reject(Long userId, Long reservationId, String reason) {
         Reservation reservation = getReservation(reservationId);
         TimeSlot slot = timeSlotService.getSlot(reservation.getSlotId());
+
+        spaceService.requireOwner(userId, slot.getSpaceId());
 
         reservation.reject(reason);
 
@@ -135,8 +152,7 @@ public class ReservationService {
     }
 
     /**
-     * 예약 취소 (FR-12, 선택 기능). 본인 예약만, 마감 전까지 취소할 수 있다.
-     * 확정 상태였다면 슬롯의 FULL 상태를 해제한다.
+     * 예약 취소. 본인 예약만, 마감 전까지 취소할 수 있다.
      */
     @Transactional
     public void cancel(Long memberId, Long reservationId) {
@@ -152,32 +168,33 @@ public class ReservationService {
         boolean wasConfirmed = reservation.getStatus() == ReservationStatus.CONFIRMED;
         reservation.cancel();
 
-        // 확정됐던 예약이 취소되면 자리가 다시 비므로 슬롯을 예약 가능 상태로
         if (wasConfirmed) {
             slot.markAvailable();
         }
 
+        Space space = spaceService.getSpace(slot.getSpaceId());
         notificationService.create(
-                slot.getCreatedBy(),
+                space.getOwnerId(),
                 NotificationType.RESERVATION_CANCELLED,
-                "회원이 예약을 취소했어요. " + describe(slot),
+                "참가자가 예약을 취소했어요. " + describe(slot),
                 reservationId);
     }
 
-    /** 회원용: 내 예약 목록 + 상태 (FR-10) */
+    /** 참가자용: 내 예약 목록 */
     public List<Reservation> getMyReservations(Long memberId) {
         return reservationRepository.findByMemberIdOrderByRequestedAtDesc(memberId);
     }
 
-    /** 사장님용: 처리 대기(REQUESTED) 예약 목록 (UC-03) */
-    public List<Reservation> getPendingReservations(Long adminId) {
-        userService.requireAdmin(adminId);
-        return reservationRepository.findByStatusOrderByRequestedAtAsc(ReservationStatus.REQUESTED);
+    /** 운영자용: 특정 공간의 처리 대기(REQUESTED) 예약 목록 */
+    public List<Reservation> getPendingReservations(Long userId, Long spaceId) {
+        spaceService.requireOwner(userId, spaceId);
+        return reservationRepository.findPendingBySpaceId(spaceId);
     }
 
-    /** 사장님용: 여러 슬롯 ID + 상태 목록으로 예약 조회 (대시보드용) */
+    /** 운영자용: 여러 슬롯 ID + 상태 목록으로 예약 조회 */
     public List<Reservation> getReservationsBySlotIds(List<Long> slotIds,
                                                        List<ReservationStatus> statuses) {
+        if (slotIds.isEmpty()) return List.of();
         return reservationRepository.findBySlotIdInAndStatusIn(slotIds, statuses);
     }
 
@@ -186,12 +203,10 @@ public class ReservationService {
                 .orElseThrow(() -> new NotFoundException("예약을 찾을 수 없습니다. id=" + reservationId));
     }
 
-    /** 특정 슬롯의 확정(CONFIRMED) 예약 인원 — 슬롯 응답의 '남은 자리' 계산에 사용 */
     public long confirmedCount(Long slotId) {
         return reservationRepository.countBySlotIdAndStatus(slotId, ReservationStatus.CONFIRMED);
     }
 
-    /** 알림 메시지에 들어갈 슬롯 설명 (예: "5월 20일 14:00~16:00") */
     private String describe(TimeSlot slot) {
         return slot.getSlotDate().format(DATE_FMT) + " "
                 + slot.getStartTime().format(TIME_FMT) + "~"

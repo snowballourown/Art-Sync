@@ -1,11 +1,10 @@
 package com.artsync.domain.user;
 
 /**
- * 사용자 권한.
- * ADMIN  - 사장님 (시간대 등록, 예약 최종 수락/거절)
- * MEMBER - 회원 (시간대 조회, 예약 요청)
+ * 사용자 역할.
+ * USER  - 모든 가입 회원. Space 를 직접 만들어 운영자가 될 수도 있고,
+ *         다른 Space 에 참가자로 예약을 넣을 수도 있다.
  */
 public enum Role {
-    ADMIN,
-    MEMBER
+    USER
 }

@@ -15,40 +15,37 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 시간 슬롯 등록/관리 비즈니스 로직 (사장님 기능).
- * 대응 요구사항: FR-01, FR-02, FR-03, FR-11
+ * 시간 슬롯 등록/관리 비즈니스 로직.
+ * 모든 쓰기 작업은 SpaceService.requireOwner() 로 공간 운영자 여부를 먼저 검증한다.
  */
 @Service
 @Transactional(readOnly = true)
 public class TimeSlotService {
 
-    /** 슬롯 생성 시 capacity 미지정이면 적용하는 기본 수용 인원 */
     public static final int DEFAULT_CAPACITY = 4;
 
     private final TimeSlotRepository timeSlotRepository;
     private final ReservationRepository reservationRepository;
-    private final UserService userService;
+    private final SpaceService spaceService;
 
     public TimeSlotService(TimeSlotRepository timeSlotRepository,
                            ReservationRepository reservationRepository,
-                           UserService userService) {
+                           SpaceService spaceService) {
         this.timeSlotRepository = timeSlotRepository;
         this.reservationRepository = reservationRepository;
-        this.userService = userService;
+        this.spaceService = spaceService;
     }
 
     /**
      * 슬롯 일괄 생성 (FR-01, FR-02).
      * startTime ~ endTime 구간을 slotMinutes 단위로 잘라 여러 슬롯을 만든다.
-     * 생성된 슬롯은 비공개(active=false) 상태이며, 별도로 activate 해야 회원에게 보인다.
-     *
-     * @param capacity null 또는 0 이하이면 DEFAULT_CAPACITY(4) 적용
+     * 생성된 슬롯은 비공개(active=false) 상태이며, activate() 해야 회원에게 보인다.
      */
     @Transactional
-    public List<Long> createSlots(Long adminId, LocalDate date,
+    public List<Long> createSlots(Long userId, Long spaceId, LocalDate date,
                                   LocalTime startTime, LocalTime endTime,
                                   int slotMinutes, Integer capacity) {
-        userService.requireAdmin(adminId);
+        spaceService.requireOwner(userId, spaceId);
 
         if (slotMinutes <= 0) {
             throw new BusinessException("슬롯 길이는 1분 이상이어야 합니다.");
@@ -62,7 +59,10 @@ public class TimeSlotService {
         LocalTime cursor = startTime;
         while (!cursor.plusMinutes(slotMinutes).isAfter(endTime)) {
             LocalTime slotEnd = cursor.plusMinutes(slotMinutes);
-            TimeSlot slot = new TimeSlot(date, cursor, slotEnd, appliedCapacity, adminId);
+            if (timeSlotRepository.countOverlapping(spaceId, date, cursor, slotEnd) > 0) {
+                throw new BusinessException(cursor + " ~ " + slotEnd + " 시간대는 이미 존재하는 슬롯과 겹칩니다.");
+            }
+            TimeSlot slot = new TimeSlot(spaceId, date, cursor, slotEnd, appliedCapacity, userId);
             createdIds.add(timeSlotRepository.save(slot).getId());
             cursor = slotEnd;
         }
@@ -72,23 +72,27 @@ public class TimeSlotService {
         return createdIds;
     }
 
-    /** 단건 슬롯 생성 — 시간 범위를 직접 지정 */
+    /** 단건 슬롯 생성 */
     @Transactional
-    public Long createSlot(Long adminId, LocalDate date,
+    public Long createSlot(Long userId, Long spaceId, LocalDate date,
                            LocalTime startTime, LocalTime endTime, Integer capacity) {
-        userService.requireAdmin(adminId);
+        spaceService.requireOwner(userId, spaceId);
         if (!startTime.isBefore(endTime)) {
             throw new BusinessException("시작 시간은 종료 시간보다 빨라야 합니다.");
         }
+        if (timeSlotRepository.countOverlapping(spaceId, date, startTime, endTime) > 0) {
+            throw new BusinessException(startTime + " ~ " + endTime + " 시간대는 이미 존재하는 슬롯과 겹칩니다.");
+        }
         int appliedCapacity = (capacity == null || capacity <= 0) ? DEFAULT_CAPACITY : capacity;
-        TimeSlot slot = new TimeSlot(date, startTime, endTime, appliedCapacity, adminId);
+        TimeSlot slot = new TimeSlot(spaceId, date, startTime, endTime, appliedCapacity, userId);
         return timeSlotRepository.save(slot).getId();
     }
 
-    /** 슬롯 시간 수정 (FR-02) */
+    /** 슬롯 시간 수정 */
     @Transactional
-    public void updateSlotTime(Long adminId, Long slotId, LocalTime startTime, LocalTime endTime) {
-        userService.requireAdmin(adminId);
+    public void updateSlotTime(Long userId, Long spaceId, Long slotId,
+                               LocalTime startTime, LocalTime endTime) {
+        spaceService.requireOwner(userId, spaceId);
         if (!startTime.isBefore(endTime)) {
             throw new BusinessException("시작 시간은 종료 시간보다 빨라야 합니다.");
         }
@@ -99,24 +103,24 @@ public class TimeSlotService {
         slot.changeTime(startTime, endTime);
     }
 
-    /** 슬롯 활성화 — 회원에게 공개 (FR-03) */
+    /** 슬롯 활성화 — 참가자에게 공개 */
     @Transactional
-    public void activate(Long adminId, Long slotId) {
-        userService.requireAdmin(adminId);
+    public void activate(Long userId, Long spaceId, Long slotId) {
+        spaceService.requireOwner(userId, spaceId);
         getSlot(slotId).activate();
     }
 
-    /** 슬롯 비활성화 — 회원에게서 숨김 (FR-03) */
+    /** 슬롯 비활성화 — 참가자에게서 숨김 */
     @Transactional
-    public void deactivate(Long adminId, Long slotId) {
-        userService.requireAdmin(adminId);
+    public void deactivate(Long userId, Long spaceId, Long slotId) {
+        spaceService.requireOwner(userId, spaceId);
         getSlot(slotId).deactivate();
     }
 
-    /** 슬롯 삭제 — 진행 중인 예약이 있으면 막는다 */
+    /** 슬롯 삭제 */
     @Transactional
-    public void deleteSlot(Long adminId, Long slotId) {
-        userService.requireAdmin(adminId);
+    public void deleteSlot(Long userId, Long spaceId, Long slotId) {
+        spaceService.requireOwner(userId, spaceId);
         TimeSlot slot = getSlot(slotId);
         if (hasActiveReservation(slotId)) {
             throw new BusinessException("이미 예약이 있는 슬롯은 삭제할 수 없습니다.");
@@ -124,20 +128,21 @@ public class TimeSlotService {
         timeSlotRepository.delete(slot);
     }
 
-
-    /** 사장님용: 날짜 범위의 모든 슬롯 (월별 다이어리용) */
-    public List<TimeSlot> getSlotsForAdminBetween(LocalDate from, LocalDate to) {
-        return timeSlotRepository.findBySlotDateBetweenOrderBySlotDateAscStartTimeAsc(from, to);
+    /** 운영자용: 날짜 범위의 모든 슬롯 (월별 달력용) */
+    public List<TimeSlot> getSlotsForOwnerBetween(Long spaceId, LocalDate from, LocalDate to) {
+        return timeSlotRepository
+                .findBySpaceIdAndSlotDateBetweenOrderBySlotDateAscStartTimeAsc(spaceId, from, to);
     }
 
-    /** 사장님용: 특정 날짜의 모든 슬롯 (활성/비활성 포함, FR-11) */
-    public List<TimeSlot> getSlotsForAdmin(LocalDate date) {
-        return timeSlotRepository.findBySlotDateOrderByStartTime(date);
+    /** 운영자용: 특정 날짜의 모든 슬롯 (활성/비활성 포함) */
+    public List<TimeSlot> getSlotsForOwner(Long spaceId, LocalDate date) {
+        return timeSlotRepository.findBySpaceIdAndSlotDateOrderByStartTime(spaceId, date);
     }
 
-    /** 회원용: 특정 날짜의 활성화된 슬롯만 (FR-04) */
-    public List<TimeSlot> getActiveSlots(LocalDate date) {
-        return timeSlotRepository.findBySlotDateAndActiveTrueOrderByStartTime(date);
+    /** 참가자용: 특정 공간·날짜의 활성화된 슬롯만 */
+    public List<TimeSlot> getActiveSlots(Long spaceId, LocalDate date) {
+        return timeSlotRepository
+                .findBySpaceIdAndSlotDateAndActiveTrueOrderByStartTime(spaceId, date);
     }
 
     public TimeSlot getSlot(Long slotId) {
@@ -145,7 +150,6 @@ public class TimeSlotService {
                 .orElseThrow(() -> new NotFoundException("시간 슬롯을 찾을 수 없습니다. id=" + slotId));
     }
 
-    /** 진행 중(REQUESTED/CONFIRMED)인 예약이 하나라도 있는지 */
     private boolean hasActiveReservation(Long slotId) {
         long requested = reservationRepository.countBySlotIdAndStatus(slotId, ReservationStatus.REQUESTED);
         long confirmed = reservationRepository.countBySlotIdAndStatus(slotId, ReservationStatus.CONFIRMED);

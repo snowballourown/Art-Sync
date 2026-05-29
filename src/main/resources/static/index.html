@@ -3,133 +3,258 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Art-Sync | 화방 예약</title>
+    <title>Art-Sync</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
+
 <div class="app-header">
-    <h1>🎨 Art-Sync</h1>
+    <h1>Art-Sync</h1>
 </div>
 
 <div class="container login-wrapper">
-    <!-- 로고 -->
+
     <div class="login-logo">
-        <div class="logo-icon">🎨</div>
-        <div class="logo-name">화방 예약 시스템</div>
+        <div class="logo-mark">AS</div>
+        <div class="logo-name">화실 예약 시스템</div>
         <div class="logo-sub">Art-Sync</div>
     </div>
 
-    <!-- 이미 로그인된 경우 배너 -->
-    <div id="alreadyLoginBanner" style="display:none;background:#f0f8f0;border:1.5px solid #9dd9bb;border-radius:10px;padding:14px 16px;margin-bottom:16px;">
-        <div style="font-size:15px;color:#1f6b41;font-weight:bold;margin-bottom:8px;">
-            ✅ <span id="alreadyName"></span> (<span id="alreadyRole"></span>) 로 로그인되어 있어요
+    <!-- 이미 로그인 배너 -->
+    <div id="alreadyBanner" style="display:none;background:#f0f0f0;border:1.5px solid #d0d0d0;border-radius:10px;padding:14px 16px;margin-bottom:16px;">
+        <div style="font-size:15px;color:#111;font-weight:bold;margin-bottom:8px;">
+            <span id="bannerName"></span> (<span id="bannerRole"></span>) 로 로그인되어 있어요
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
-            <button class="btn btn-green btn-small" id="alreadyGoBtn">내 페이지로 이동</button>
-            <button class="btn btn-sub btn-small" onclick="doLogoutAndStay()">로그아웃 후 다른 계정으로</button>
+            <button class="btn btn-green btn-small" id="bannerGoBtn">내 페이지로 이동</button>
+            <button class="btn btn-sub btn-small" onclick="doLogoutAndStay()">다른 계정으로</button>
         </div>
     </div>
 
+    <!-- 탭 -->
     <div class="tabs">
-        <button id="tabLogin" class="active" onclick="switchTab('login')">로그인</button>
+        <button id="tabLogin"  class="active" onclick="switchTab('login')">로그인</button>
         <button id="tabSignup" onclick="switchTab('signup')">회원가입</button>
     </div>
 
     <div id="msg" class="msg"></div>
 
-    <!-- 로그인 -->
-    <div id="loginCard" class="card">
-        <label for="loginId">아이디</label>
-        <input type="text" id="loginId" autocomplete="username" placeholder="아이디 입력">
-        <label for="loginPw">비밀번호</label>
-        <input type="password" id="loginPw" autocomplete="current-password" placeholder="비밀번호 입력">
-        <button class="btn" onclick="doLogin()">로그인</button>
-        <div class="admin-hint">사장님 기본 계정: <strong>admin</strong> / <strong>admin1234</strong></div>
+    <!-- 로그인 섹션 (2단계) -->
+    <div id="loginSection">
+        <div class="step-outer">
+            <div class="step-track" id="loginStepTrack">
+
+                <!-- Step 1: 자격증명 -->
+                <div class="step-pane">
+                    <div class="card">
+                        <label for="loginId">아이디</label>
+                        <input type="text" id="loginId" autocomplete="username" placeholder="아이디 입력">
+                        <label for="loginPw">비밀번호</label>
+                        <input type="password" id="loginPw" autocomplete="current-password" placeholder="비밀번호 입력">
+                        <button class="btn" onclick="loginStep1()">다음</button>
+                    </div>
+                </div>
+
+                <!-- Step 2: 역할 선택 -->
+                <div class="step-pane">
+                    <div class="card">
+                        <button class="btn-back" onclick="loginGoBack()">← 뒤로</button>
+
+                        <div class="step2-greeting">
+                            <div class="greeting-name" id="loginGreetName">안녕하세요!</div>
+                            <div class="greeting-sub">오늘은 어떤 역할로 시작할까요?</div>
+                        </div>
+
+                        <div class="role-cards">
+                            <div class="role-card" id="loginCardT" onclick="loginSelectRole('TEACHER')">
+                                <span class="rc-check">✓</span>
+                                <div class="rc-title">선생님</div>
+                                <div class="rc-desc">수업을 만들고<br>시간대를 관리해요</div>
+                            </div>
+                            <div class="role-card" id="loginCardP" onclick="loginSelectRole('PARTICIPANT')">
+                                <span class="rc-check">✓</span>
+                                <div class="rc-title">참여자</div>
+                                <div class="rc-desc">열려있는 수업을<br>찾아 예약해요</div>
+                            </div>
+                        </div>
+
+                        <button class="btn" id="loginConfirmBtn" onclick="loginStep2()" style="margin-top:18px;" disabled>
+                            시작하기
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="step-dots">
+            <div class="dot on" id="dot0"></div>
+            <div class="dot"    id="dot1"></div>
+        </div>
     </div>
 
-    <!-- 회원가입 -->
-    <div id="signupCard" class="card" style="display:none;">
-        <label for="suId">아이디</label>
-        <input type="text" id="suId" placeholder="영문/숫자 조합">
-        <label for="suPw">비밀번호</label>
-        <input type="password" id="suPw" placeholder="6자 이상">
-        <label for="suName">이름</label>
-        <input type="text" id="suName" placeholder="실명을 입력해 주세요">
-        <label for="suPhone">연락처 <span style="font-weight:normal;color:#aaa;">(선택)</span></label>
-        <input type="text" id="suPhone" placeholder="010-0000-0000">
-        <button class="btn" onclick="doSignup()">가입하기</button>
+    <!-- 회원가입 섹션 -->
+    <div id="signupSection" style="display:none;">
+        <div class="card">
+
+            <div class="role-section-label">어떤 역할로 시작할까요?</div>
+            <div class="role-cards">
+                <div class="role-card" id="suCardT" onclick="signupSelectRole('TEACHER')">
+                    <span class="rc-check">✓</span>
+                    <div class="rc-title">선생님</div>
+                    <div class="rc-desc">수업을 만들고<br>시간대를 관리해요</div>
+                </div>
+                <div class="role-card" id="suCardP" onclick="signupSelectRole('PARTICIPANT')">
+                    <span class="rc-check">✓</span>
+                    <div class="rc-title">참여자</div>
+                    <div class="rc-desc">열려있는 수업을<br>찾아 예약해요</div>
+                </div>
+            </div>
+
+            <label for="suId" style="margin-top:18px;">아이디</label>
+            <input type="text" id="suId" autocomplete="username" placeholder="영문/숫자 조합">
+            <label for="suPw">비밀번호</label>
+            <input type="password" id="suPw" autocomplete="new-password" placeholder="6자 이상">
+            <label for="suName">이름</label>
+            <input type="text" id="suName" placeholder="실명을 입력해 주세요">
+            <label for="suPhone">연락처 <span style="font-weight:normal;color:#aaa;">(선택)</span></label>
+            <input type="text" id="suPhone" placeholder="010-0000-0000">
+
+            <button class="btn" id="suSubmitBtn" onclick="doSignup()" style="margin-top:18px;" disabled>
+                가입하기
+            </button>
+        </div>
     </div>
+
 </div>
 
 <script src="app.js"></script>
 <script>
-    // 이미 로그인된 경우 — 현재 계정 배너 표시 (자동 리다이렉트 제거)
-    (async function () {
+    let _loginCreds = null;
+    let _loginRole  = null;
+    let _signupRole = null;
+
+    /* 이미 로그인 확인 */
+    (async () => {
         try {
             const user = await api('GET', '/api/auth/me');
-            // 이미 로그인됨 → 상단 배너로 안내, 로그인 폼은 그대로 유지
-            const banner = document.getElementById('alreadyLoginBanner');
-            document.getElementById('alreadyName').textContent = user.name;
-            document.getElementById('alreadyRole').textContent = user.role === 'ADMIN' ? '사장님' : '회원';
-            document.getElementById('alreadyGoBtn').onclick = () => {
-                location.href = (user.role === 'ADMIN') ? 'admin.html' : 'member.html';
+            const label = user.sessionRole === 'TEACHER' ? '선생님' : '참여자';
+            document.getElementById('bannerName').textContent = user.name;
+            document.getElementById('bannerRole').textContent = label;
+            document.getElementById('bannerGoBtn').onclick = () => {
+                location.href = user.sessionRole === 'TEACHER' ? 'admin.html' : 'member.html';
             };
-            banner.style.display = 'block';
-        } catch (e) { /* 로그인 안 됨 — 정상적으로 폼 표시 */ }
+            document.getElementById('alreadyBanner').style.display = 'block';
+        } catch (_) {}
     })();
 
+    /* 탭 전환 */
     function switchTab(which) {
         const isLogin = which === 'login';
         document.getElementById('tabLogin').classList.toggle('active', isLogin);
         document.getElementById('tabSignup').classList.toggle('active', !isLogin);
-        document.getElementById('loginCard').style.display = isLogin ? 'block' : 'none';
-        document.getElementById('signupCard').style.display = isLogin ? 'none' : 'block';
+        document.getElementById('loginSection').style.display  = isLogin ? '' : 'none';
+        document.getElementById('signupSection').style.display = isLogin ? 'none' : '';
         document.getElementById('msg').className = 'msg';
     }
 
-    async function doLogin() {
-        const loginId = document.getElementById('loginId').value.trim();
+    /* 로그인 — 2단계 */
+    async function loginStep1() {
+        const loginId  = document.getElementById('loginId').value.trim();
         const password = document.getElementById('loginPw').value;
         if (!loginId || !password) {
             showMessage('msg', '아이디와 비밀번호를 입력해 주세요.', 'error');
             return;
         }
         try {
-            const user = await api('POST', '/api/auth/login', { loginId, password });
-            location.href = (user.role === 'ADMIN') ? 'admin.html' : 'member.html';
+            const user = await api('POST', '/api/auth/login', { loginId, password, role: 'PARTICIPANT' });
+            _loginCreds = { loginId, password };
+            document.getElementById('loginGreetName').textContent = user.name + '님, 안녕하세요!';
+            resetLoginRole();
+            setLoginStep(1);
         } catch (e) {
             showMessage('msg', e.message, 'error');
         }
     }
 
+    function loginGoBack() {
+        _loginCreds = null;
+        _loginRole  = null;
+        resetLoginRole();
+        setLoginStep(0);
+        document.getElementById('msg').className = 'msg';
+    }
+
+    function loginSelectRole(role) {
+        _loginRole = role;
+        document.getElementById('loginCardT').classList.toggle('selected', role === 'TEACHER');
+        document.getElementById('loginCardP').classList.toggle('selected', role === 'PARTICIPANT');
+        document.getElementById('loginConfirmBtn').disabled = false;
+    }
+
+    function resetLoginRole() {
+        _loginRole = null;
+        document.getElementById('loginCardT').classList.remove('selected');
+        document.getElementById('loginCardP').classList.remove('selected');
+        document.getElementById('loginConfirmBtn').disabled = true;
+    }
+
+    async function loginStep2() {
+        if (!_loginCreds || !_loginRole) return;
+        try {
+            await api('POST', '/api/auth/login', { ..._loginCreds, role: _loginRole });
+            location.href = _loginRole === 'TEACHER' ? 'admin.html' : 'member.html';
+        } catch (e) {
+            showMessage('msg', e.message, 'error');
+        }
+    }
+
+    function setLoginStep(idx) {
+        document.getElementById('loginStepTrack').style.transform = `translateX(-${idx * 100}%)`;
+        document.getElementById('dot0').classList.toggle('on', idx === 0);
+        document.getElementById('dot1').classList.toggle('on', idx === 1);
+    }
+
+    document.getElementById('loginPw').addEventListener('keyup', e => {
+        if (e.key === 'Enter') loginStep1();
+    });
+
+    /* 회원가입 */
+    function signupSelectRole(role) {
+        _signupRole = role;
+        document.getElementById('suCardT').classList.toggle('selected', role === 'TEACHER');
+        document.getElementById('suCardP').classList.toggle('selected', role === 'PARTICIPANT');
+        document.getElementById('suSubmitBtn').disabled = false;
+    }
+
     async function doSignup() {
+        if (!_signupRole) {
+            showMessage('msg', '역할을 먼저 선택해 주세요.', 'error');
+            return;
+        }
         const loginId = document.getElementById('suId').value.trim();
         const password = document.getElementById('suPw').value;
-        const name = document.getElementById('suName').value.trim();
-        const phone = document.getElementById('suPhone').value.trim();
+        const name     = document.getElementById('suName').value.trim();
+        const phone    = document.getElementById('suPhone').value.trim();
+
         if (!loginId || !password || !name) {
             showMessage('msg', '아이디, 비밀번호, 이름은 꼭 입력해 주세요.', 'error');
             return;
         }
         try {
             await api('POST', '/api/auth/signup', { loginId, password, name, phone });
-            showMessage('msg', '가입이 완료되었어요. 로그인해 주세요.', 'ok');
-            switchTab('login');
-            document.getElementById('loginId').value = loginId;
+            await api('POST', '/api/auth/login', { loginId, password, role: _signupRole });
+            location.href = _signupRole === 'TEACHER' ? 'admin.html' : 'member.html';
         } catch (e) {
             showMessage('msg', e.message, 'error');
         }
     }
 
+    /* 다른 계정으로 */
     async function doLogoutAndStay() {
-        try { await api('POST', '/api/auth/logout'); } catch(e) {}
-        document.getElementById('alreadyLoginBanner').style.display = 'none';
-        showMessage('msg', '로그아웃됐어요. 다른 계정으로 로그인해 주세요.', 'ok');
+        try { await api('POST', '/api/auth/logout'); } catch (_) {}
+        document.getElementById('alreadyBanner').style.display = 'none';
+        showMessage('msg', '로그아웃됐어요. 다시 로그인해 주세요.', 'ok');
     }
-
-    document.getElementById('loginPw').addEventListener('keyup', function (e) {
-        if (e.key === 'Enter') doLogin();
-    });
 </script>
 </body>
 </html>

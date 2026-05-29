@@ -40,17 +40,13 @@ public class User {
         // JPA 기본 생성자
     }
 
-    public User(String loginId, String password, String name, String phone, Role role) {
+    public User(String loginId, String password, String name, String phone) {
         this.loginId = loginId;
         this.password = password;
         this.name = name;
         this.phone = phone;
-        this.role = role;
+        this.role = Role.USER;
         this.createdAt = LocalDateTime.now();
-    }
-
-    public boolean isAdmin() {
-        return this.role == Role.ADMIN;
     }
 
     public void changePassword(String encodedPassword) {
