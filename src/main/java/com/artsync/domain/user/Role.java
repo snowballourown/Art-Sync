@@ -1,10 +1,11 @@
 package com.artsync.domain.user;
 
 /**
- * 사용자 역할.
- * USER  - 모든 가입 회원. Space 를 직접 만들어 운영자가 될 수도 있고,
- *         다른 Space 에 참가자로 예약을 넣을 수도 있다.
+ * 사용자 역할 — 가입 시 선택되며 이후 변경되지 않는다.
+ * TEACHER     : 수업 생성·슬롯 관리·예약 수락/거절
+ * PARTICIPANT : 수업 탐색·예약 요청/취소
  */
 public enum Role {
-    USER
+    TEACHER,
+    PARTICIPANT
 }

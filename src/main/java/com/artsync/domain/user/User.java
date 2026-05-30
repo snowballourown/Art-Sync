@@ -30,7 +30,7 @@ public class User {
     private String phone;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 10)
+    @Column(nullable = false, length = 15)
     private Role role;
 
     @Column(nullable = false)
@@ -40,12 +40,12 @@ public class User {
         // JPA 기본 생성자
     }
 
-    public User(String loginId, String password, String name, String phone) {
+    public User(String loginId, String password, String name, String phone, Role role) {
         this.loginId = loginId;
         this.password = password;
         this.name = name;
         this.phone = phone;
-        this.role = Role.USER;
+        this.role = role;
         this.createdAt = LocalDateTime.now();
     }
 

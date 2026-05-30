@@ -2,6 +2,7 @@ package com.artsync.controller;
 
 import com.artsync.common.web.SessionRole;
 import com.artsync.common.web.SessionUtil;
+import com.artsync.domain.user.Role;
 import com.artsync.domain.user.User;
 import com.artsync.dto.IdResponse;
 import com.artsync.dto.LoginRequest;
@@ -16,8 +17,8 @@ import org.springframework.web.bind.annotation.*;
 /**
  * 인증 API.
  *
- * 로그인 시 역할(TEACHER | PARTICIPANT)을 함께 선택한다.
- * 선택한 역할은 세션에 저장되어 이후 요청의 권한 판단에 사용된다.
+ * 회원가입 시 역할(TEACHER | PARTICIPANT)을 선택하고 DB에 저장한다.
+ * 로그인은 아이디/비밀번호만 입력하면 저장된 역할이 자동으로 세션에 설정된다.
  */
 @RestController
 @RequestMapping("/api/auth")
@@ -29,23 +30,23 @@ public class AuthController {
         this.userService = userService;
     }
 
-    /** 회원 가입 */
+    /** 회원 가입 — 역할(TEACHER | PARTICIPANT)을 선택하여 DB에 저장 */
     @PostMapping("/signup")
     public IdResponse signup(@Valid @RequestBody SignupRequest request) {
         Long id = userService.register(
-                request.loginId(), request.password(), request.name(), request.phone());
+                request.loginId(), request.password(), request.name(), request.phone(), request.role());
         return new IdResponse(id);
     }
 
     /**
      * 로그인.
-     * body: { loginId, password, role: "TEACHER" | "PARTICIPANT" }
-     * 성공 시 세션에 userId + sessionRole 저장.
+     * body: { loginId, password }
+     * 역할은 가입 시 저장된 값을 자동으로 사용. 성공 시 세션에 userId + sessionRole 저장.
      */
     @PostMapping("/login")
     public UserResponse login(@Valid @RequestBody LoginRequest request, HttpSession session) {
         User user = userService.authenticate(request.loginId(), request.password());
-        SessionRole role = request.role();
+        SessionRole role = user.getRole() == Role.TEACHER ? SessionRole.TEACHER : SessionRole.PARTICIPANT;
         SessionUtil.login(session, user.getId(), role);
         return UserResponse.from(user, role);
     }

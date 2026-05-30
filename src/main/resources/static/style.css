@@ -990,13 +990,37 @@ button { font-family: inherit; }
     border-width: 2px;
     background: #fafafa;
 }
+/* 예약 확정 — 진한 배경으로 완료 상태 표시 */
 .cal-cell.cal-has-res {
-    background: #f5f5f5;
-    border-color: #333;
+    background: #333;
+    border-color: #111;
 }
+.cal-cell.cal-has-res .cal-day-num {
+    color: #fff;
+}
+.cal-cell.cal-has-res .cal-name {
+    background: #555;
+    color: #fff;
+}
+.cal-cell.cal-has-res .cal-name:hover {
+    background: #fff;
+    color: #111;
+}
+.cal-cell.cal-has-res .cal-more {
+    color: #ccc;
+}
+
+/* 예약 대기 — 밝은 배경 + 점선 테두리로 처리 필요 표시 */
 .cal-cell.cal-has-pending {
-    background: #ebebeb;
-    border-color: #888;
+    background: #fff;
+    border: 2px dashed #888;
+}
+.cal-cell.cal-has-pending .cal-day-num {
+    color: #111;
+}
+.cal-cell.cal-has-pending .cal-name {
+    background: #e8e8e8;
+    color: #111;
 }
 
 .cal-day-num {

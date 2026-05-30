@@ -59,9 +59,6 @@ public class TimeSlotService {
         LocalTime cursor = startTime;
         while (!cursor.plusMinutes(slotMinutes).isAfter(endTime)) {
             LocalTime slotEnd = cursor.plusMinutes(slotMinutes);
-            if (timeSlotRepository.countOverlapping(spaceId, date, cursor, slotEnd) > 0) {
-                throw new BusinessException(cursor + " ~ " + slotEnd + " 시간대는 이미 존재하는 슬롯과 겹칩니다.");
-            }
             TimeSlot slot = new TimeSlot(spaceId, date, cursor, slotEnd, appliedCapacity, userId);
             createdIds.add(timeSlotRepository.save(slot).getId());
             cursor = slotEnd;
@@ -79,9 +76,6 @@ public class TimeSlotService {
         spaceService.requireOwner(userId, spaceId);
         if (!startTime.isBefore(endTime)) {
             throw new BusinessException("시작 시간은 종료 시간보다 빨라야 합니다.");
-        }
-        if (timeSlotRepository.countOverlapping(spaceId, date, startTime, endTime) > 0) {
-            throw new BusinessException(startTime + " ~ " + endTime + " 시간대는 이미 존재하는 슬롯과 겹칩니다.");
         }
         int appliedCapacity = (capacity == null || capacity <= 0) ? DEFAULT_CAPACITY : capacity;
         TimeSlot slot = new TimeSlot(spaceId, date, startTime, endTime, appliedCapacity, userId);

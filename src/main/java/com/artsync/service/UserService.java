@@ -2,6 +2,7 @@ package com.artsync.service;
 
 import com.artsync.common.exception.BusinessException;
 import com.artsync.common.exception.NotFoundException;
+import com.artsync.domain.user.Role;
 import com.artsync.domain.user.User;
 import com.artsync.domain.user.UserRepository;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -24,13 +25,13 @@ public class UserService {
         this.passwordEncoder = passwordEncoder;
     }
 
-    /** 회원 가입. 비밀번호는 BCrypt 로 암호화하여 저장한다. */
+    /** 회원 가입. 비밀번호는 BCrypt 로 암호화하여 저장한다. 역할은 가입 시 고정된다. */
     @Transactional
-    public Long register(String loginId, String rawPassword, String name, String phone) {
+    public Long register(String loginId, String rawPassword, String name, String phone, Role role) {
         if (userRepository.existsByLoginId(loginId)) {
             throw new BusinessException("이미 사용 중인 아이디입니다: " + loginId);
         }
-        User user = new User(loginId, passwordEncoder.encode(rawPassword), name, phone);
+        User user = new User(loginId, passwordEncoder.encode(rawPassword), name, phone, role);
         return userRepository.save(user).getId();
     }
 

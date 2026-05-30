@@ -461,6 +461,12 @@
         for (let i = 0; i < rem; i++) html += '<div class="cal-cell empty"></div>';
         html += '</div>';
 
+        html += '<div class="cal-legend">'
+            + '<span class="legend-item"><span class="legend-dot" style="background:#111;"></span>슬롯만</span>'
+            + '<span class="legend-item"><span class="legend-dot" style="background:#333;"></span>예약 확정</span>'
+            + '<span class="legend-item"><span class="legend-dot" style="background:#fff;border:2px dashed #888;"></span>예약 대기</span>'
+            + '</div>';
+
         document.getElementById('calGrid').innerHTML = html;
     }
 

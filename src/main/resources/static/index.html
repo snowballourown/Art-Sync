@@ -39,56 +39,14 @@
 
     <div id="msg" class="msg"></div>
 
-    <!-- 로그인 섹션 (2단계) -->
+    <!-- 로그인 섹션 -->
     <div id="loginSection">
-        <div class="step-outer">
-            <div class="step-track" id="loginStepTrack">
-
-                <!-- Step 1: 자격증명 -->
-                <div class="step-pane">
-                    <div class="card">
-                        <label for="loginId">아이디</label>
-                        <input type="text" id="loginId" autocomplete="username" placeholder="아이디 입력">
-                        <label for="loginPw">비밀번호</label>
-                        <input type="password" id="loginPw" autocomplete="current-password" placeholder="비밀번호 입력">
-                        <button class="btn" onclick="loginStep1()">다음</button>
-                    </div>
-                </div>
-
-                <!-- Step 2: 역할 선택 -->
-                <div class="step-pane">
-                    <div class="card">
-                        <button class="btn-back" onclick="loginGoBack()">← 뒤로</button>
-
-                        <div class="step2-greeting">
-                            <div class="greeting-name" id="loginGreetName">안녕하세요!</div>
-                            <div class="greeting-sub">오늘은 어떤 역할로 시작할까요?</div>
-                        </div>
-
-                        <div class="role-cards">
-                            <div class="role-card" id="loginCardT" onclick="loginSelectRole('TEACHER')">
-                                <span class="rc-check">✓</span>
-                                <div class="rc-title">선생님</div>
-                                <div class="rc-desc">수업을 만들고<br>시간대를 관리해요</div>
-                            </div>
-                            <div class="role-card" id="loginCardP" onclick="loginSelectRole('PARTICIPANT')">
-                                <span class="rc-check">✓</span>
-                                <div class="rc-title">참여자</div>
-                                <div class="rc-desc">열려있는 수업을<br>찾아 예약해요</div>
-                            </div>
-                        </div>
-
-                        <button class="btn" id="loginConfirmBtn" onclick="loginStep2()" style="margin-top:18px;" disabled>
-                            시작하기
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="step-dots">
-            <div class="dot on" id="dot0"></div>
-            <div class="dot"    id="dot1"></div>
+        <div class="card">
+            <label for="loginId">아이디</label>
+            <input type="text" id="loginId" autocomplete="username" placeholder="아이디 입력">
+            <label for="loginPw">비밀번호</label>
+            <input type="password" id="loginPw" autocomplete="current-password" placeholder="비밀번호 입력">
+            <button class="btn" onclick="doLogin()">로그인</button>
         </div>
     </div>
 
@@ -129,8 +87,6 @@
 
 <script src="app.js"></script>
 <script>
-    let _loginCreds = null;
-    let _loginRole  = null;
     let _signupRole = null;
 
     /* 이미 로그인 확인 */
@@ -157,8 +113,8 @@
         document.getElementById('msg').className = 'msg';
     }
 
-    /* 로그인 — 2단계 */
-    async function loginStep1() {
+    /* 로그인 — 단일 단계 */
+    async function doLogin() {
         const loginId  = document.getElementById('loginId').value.trim();
         const password = document.getElementById('loginPw').value;
         if (!loginId || !password) {
@@ -166,56 +122,17 @@
             return;
         }
         try {
-            const user = await api('POST', '/api/auth/login', { loginId, password, role: 'PARTICIPANT' });
-            _loginCreds = { loginId, password };
-            document.getElementById('loginGreetName').textContent = user.name + '님, 안녕하세요!';
-            resetLoginRole();
-            setLoginStep(1);
+            const user = await api('POST', '/api/auth/login', { loginId, password });
+            location.href = user.sessionRole === 'TEACHER' ? 'admin.html' : 'member.html';
         } catch (e) {
             showMessage('msg', e.message, 'error');
         }
     }
 
-    function loginGoBack() {
-        _loginCreds = null;
-        _loginRole  = null;
-        resetLoginRole();
-        setLoginStep(0);
-        document.getElementById('msg').className = 'msg';
-    }
-
-    function loginSelectRole(role) {
-        _loginRole = role;
-        document.getElementById('loginCardT').classList.toggle('selected', role === 'TEACHER');
-        document.getElementById('loginCardP').classList.toggle('selected', role === 'PARTICIPANT');
-        document.getElementById('loginConfirmBtn').disabled = false;
-    }
-
-    function resetLoginRole() {
-        _loginRole = null;
-        document.getElementById('loginCardT').classList.remove('selected');
-        document.getElementById('loginCardP').classList.remove('selected');
-        document.getElementById('loginConfirmBtn').disabled = true;
-    }
-
-    async function loginStep2() {
-        if (!_loginCreds || !_loginRole) return;
-        try {
-            await api('POST', '/api/auth/login', { ..._loginCreds, role: _loginRole });
-            location.href = _loginRole === 'TEACHER' ? 'admin.html' : 'member.html';
-        } catch (e) {
-            showMessage('msg', e.message, 'error');
-        }
-    }
-
-    function setLoginStep(idx) {
-        document.getElementById('loginStepTrack').style.transform = `translateX(-${idx * 100}%)`;
-        document.getElementById('dot0').classList.toggle('on', idx === 0);
-        document.getElementById('dot1').classList.toggle('on', idx === 1);
-    }
-
-    document.getElementById('loginPw').addEventListener('keyup', e => {
-        if (e.key === 'Enter') loginStep1();
+    document.addEventListener('DOMContentLoaded', () => {
+        document.getElementById('loginPw').addEventListener('keyup', e => {
+            if (e.key === 'Enter') doLogin();
+        });
     });
 
     /* 회원가입 */
@@ -241,9 +158,9 @@
             return;
         }
         try {
-            await api('POST', '/api/auth/signup', { loginId, password, name, phone });
-            await api('POST', '/api/auth/login', { loginId, password, role: _signupRole });
-            location.href = _signupRole === 'TEACHER' ? 'admin.html' : 'member.html';
+            await api('POST', '/api/auth/signup', { loginId, password, name, phone, role: _signupRole });
+            const user = await api('POST', '/api/auth/login', { loginId, password });
+            location.href = user.sessionRole === 'TEACHER' ? 'admin.html' : 'member.html';
         } catch (e) {
             showMessage('msg', e.message, 'error');
         }
