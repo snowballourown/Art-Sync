@@ -26,6 +26,10 @@ public class Space {
     @Column(nullable = false)
     private Long ownerId;
 
+    /** 신규 참여자에게 적용될 기본 월간 수업 횟수 한도 */
+    @Column(nullable = false)
+    private int defaultMonthlyLimit = 4;
+
     @Column(nullable = false)
     private LocalDateTime createdAt;
 
@@ -37,6 +41,7 @@ public class Space {
         this.name = name;
         this.description = description;
         this.ownerId = ownerId;
+        this.defaultMonthlyLimit = 4;
         this.createdAt = LocalDateTime.now();
     }
 
@@ -45,9 +50,14 @@ public class Space {
         this.description = description;
     }
 
+    public void updateDefaultMonthlyLimit(int limit) {
+        this.defaultMonthlyLimit = limit;
+    }
+
     public Long getId() { return id; }
     public String getName() { return name; }
     public String getDescription() { return description; }
     public Long getOwnerId() { return ownerId; }
+    public int getDefaultMonthlyLimit() { return defaultMonthlyLimit; }
     public LocalDateTime getCreatedAt() { return createdAt; }
 }

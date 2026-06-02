@@ -28,9 +28,9 @@ public class DataInitializer implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) {
-        if (!userRepository.existsByLoginId(DEV_USER_LOGIN_ID)) {
-            userService.register(DEV_USER_LOGIN_ID, "test1234", "테스트 사용자", null, Role.TEACHER);
-            System.out.println("[DataInitializer] 개발용 계정 생성: test / test1234 (TEACHER)");
-        }
+//        if (!userRepository.existsByLoginId(DEV_USER_LOGIN_ID)) {
+//            userService.register(DEV_USER_LOGIN_ID, "test1234", "테스트 사용자", null, Role.TEACHER);
+//            System.out.println("[DataInitializer] 개발용 계정 생성: test / test1234 (TEACHER)");
+//        }
     }
 }

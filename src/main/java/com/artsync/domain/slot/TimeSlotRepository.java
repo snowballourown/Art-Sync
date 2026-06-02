@@ -27,6 +27,9 @@ public interface TimeSlotRepository extends JpaRepository<TimeSlot, Long> {
     @Query("SELECT DISTINCT t.spaceId FROM TimeSlot t WHERE t.slotDate = :date AND t.active = true")
     List<Long> findActiveSpaceIdsByDate(@Param("date") LocalDate date);
 
+    /** 특정 공간의 모든 슬롯 삭제 (수업 삭제 전처리용) */
+    void deleteBySpaceId(Long spaceId);
+
     /** 특정 공간·날짜의 겹치는 슬롯 수 (중복 생성 방지) */
     @Query("SELECT COUNT(t) FROM TimeSlot t " +
            "WHERE t.spaceId = :spaceId " +

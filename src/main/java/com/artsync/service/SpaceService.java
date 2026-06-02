@@ -2,6 +2,9 @@ package com.artsync.service;
 
 import com.artsync.common.exception.BusinessException;
 import com.artsync.common.exception.NotFoundException;
+import com.artsync.domain.reservation.ReservationRepository;
+import com.artsync.domain.reservation.ReservationStatus;
+import com.artsync.domain.slot.TimeSlotRepository;
 import com.artsync.domain.space.Space;
 import com.artsync.domain.space.SpaceRepository;
 import org.springframework.stereotype.Service;
@@ -18,9 +21,15 @@ import java.util.List;
 public class SpaceService {
 
     private final SpaceRepository spaceRepository;
+    private final TimeSlotRepository timeSlotRepository;
+    private final ReservationRepository reservationRepository;
 
-    public SpaceService(SpaceRepository spaceRepository) {
+    public SpaceService(SpaceRepository spaceRepository,
+                        TimeSlotRepository timeSlotRepository,
+                        ReservationRepository reservationRepository) {
         this.spaceRepository = spaceRepository;
+        this.timeSlotRepository = timeSlotRepository;
+        this.reservationRepository = reservationRepository;
     }
 
     /** 공간 생성 — 호출자가 자동으로 운영자가 된다. */
@@ -37,10 +46,18 @@ public class SpaceService {
         getSpace(spaceId).update(name, description);
     }
 
-    /** 공간 삭제 */
+    /** 공간 삭제 — 진행 중 예약이 있으면 거부, 없으면 슬롯 포함 일괄 삭제 */
     @Transactional
     public void deleteSpace(Long userId, Long spaceId) {
         requireOwner(userId, spaceId);
+        long activeCount = reservationRepository.countActiveBySpaceId(
+                spaceId,
+                List.of(ReservationStatus.REQUESTED, ReservationStatus.CONFIRMED));
+        if (activeCount > 0) {
+            throw new BusinessException(
+                    "진행 중인 예약이 " + activeCount + "건 있습니다. 예약을 모두 처리한 뒤 삭제해 주세요.");
+        }
+        timeSlotRepository.deleteBySpaceId(spaceId);
         spaceRepository.deleteById(spaceId);
     }
 

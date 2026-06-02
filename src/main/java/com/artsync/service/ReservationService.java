@@ -29,15 +29,18 @@ public class ReservationService {
     private final ReservationRepository reservationRepository;
     private final TimeSlotService timeSlotService;
     private final SpaceService spaceService;
+    private final SpaceMemberService spaceMemberService;
     private final NotificationService notificationService;
 
     public ReservationService(ReservationRepository reservationRepository,
                               TimeSlotService timeSlotService,
                               SpaceService spaceService,
+                              SpaceMemberService spaceMemberService,
                               NotificationService notificationService) {
         this.reservationRepository = reservationRepository;
         this.timeSlotService = timeSlotService;
         this.spaceService = spaceService;
+        this.spaceMemberService = spaceMemberService;
         this.notificationService = notificationService;
     }
 
@@ -80,6 +83,15 @@ public class ReservationService {
                     "같은 날 " + slot.getStartTime().toString().substring(0, 5)
                     + "~" + slot.getEndTime().toString().substring(0, 5)
                     + " 시간대와 겹치는 예약이 이미 있습니다.");
+        }
+
+        // 월간 한도 체크 — SpaceMember 자동 등록 후 한도 확인
+        spaceMemberService.getOrCreate(slot.getSpaceId(), memberId);
+        long monthlyUsed = spaceMemberService.getMonthlyUsed(memberId, slot.getSpaceId());
+        int monthlyLimit = spaceMemberService.getMonthlyLimit(memberId, slot.getSpaceId());
+        if (monthlyUsed >= monthlyLimit) {
+            throw new BusinessException(
+                    "이번 달 수업 신청 한도(" + monthlyLimit + "회)를 모두 사용했습니다.");
         }
 
         Reservation reservation = new Reservation(slotId, memberId, memo);

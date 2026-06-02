@@ -1144,6 +1144,55 @@ button { font-family: inherit; }
     overflow-y: auto;
 }
 
+/* 날짜 클릭 모달 (참여자 화면) */
+.slot-modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.45);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    box-sizing: border-box;
+}
+.slot-modal-overlay.show { display: flex; }
+.slot-modal {
+    background: #fff;
+    border-radius: 14px;
+    width: 100%;
+    max-width: 420px;
+    max-height: 82vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.22);
+    animation: modalIn 0.18s ease;
+}
+@keyframes modalIn {
+    from { opacity: 0; transform: translateY(16px) scale(0.97); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.slot-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 18px;
+    border-bottom: 1px solid #e8e8e8;
+    background: #f8f8f8;
+    flex-shrink: 0;
+}
+.slot-modal-title {
+    font-size: 16px;
+    font-weight: bold;
+    color: #111;
+}
+.slot-modal-body {
+    padding: 14px 18px;
+    overflow-y: auto;
+    flex: 1;
+}
+
 /* ============================================
    요일 반복 스타일
    ============================================ */

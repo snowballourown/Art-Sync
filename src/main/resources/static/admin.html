@@ -32,6 +32,14 @@
         .space-card.selected .sc-check { display: block; }
         .space-card .sc-name { font-weight: bold; font-size: 15px; color: #111; margin-bottom: 4px; }
         .space-card .sc-desc { font-size: 12px; color: var(--text-sub); line-height: 1.4; }
+        .space-card .sc-delete {
+            display: none;
+            position: absolute; bottom: 8px; right: 8px;
+            font-size: 11px; color: #999; background: none; border: 1px solid #ddd;
+            border-radius: 5px; padding: 2px 7px; cursor: pointer; line-height: 1.6;
+        }
+        .space-card:hover .sc-delete { display: block; }
+        .space-card .sc-delete:hover { color: #c00; border-color: #c00; background: #fff4f4; }
 
         .create-space-form {
             margin-top: 14px;
@@ -70,6 +78,28 @@
         }
         .space-bar .sb-name { font-weight: bold; color: #111; font-size: 15px; flex: 1; }
         .space-bar .sb-label { font-size: 12px; color: var(--text-sub); }
+
+        /* 회원 현황판 */
+        .member-stat-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 0;
+            border-bottom: 1px solid var(--border);
+        }
+        .member-stat-row:last-child { border-bottom: none; }
+        .ms-name { font-weight: 600; font-size: 14px; flex: 1; }
+        .ms-usage { font-size: 13px; color: #444; min-width: 80px; }
+        .ms-usage.over { color: #c00; font-weight: bold; }
+        .ms-limit-input {
+            width: 56px; text-align: center;
+            border: 1.5px solid var(--border); border-radius: 6px;
+            padding: 4px 6px; font-size: 13px; font-family: inherit;
+        }
+        .ms-limit-input:focus { outline: none; border-color: #111; }
+        .usage-bar-wrap { width: 80px; height: 6px; background: #eee; border-radius: 3px; }
+        .usage-bar { height: 6px; border-radius: 3px; background: #111; transition: width 0.3s; }
+        .usage-bar.full { background: #c00; }
     </style>
 </head>
 <body>
@@ -230,6 +260,21 @@
             </div>
         </div>
 
+        <!-- 회원 현황판 -->
+        <div class="card">
+            <div class="collapsible-header" onclick="toggleSection('memberBoard')">
+                <span class="card-title">회원 현황판</span>
+                <span class="toggle-icon">▼</span>
+            </div>
+            <div id="memberBoardBody" class="collapsible-body">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+                    <span style="font-size:13px;color:var(--text-sub);">이번 달 수업 신청 현황 및 월간 한도 관리</span>
+                    <button class="btn btn-sub btn-small" onclick="loadMemberBoard()">새로고침</button>
+                </div>
+                <div id="memberBoardList"><div class="empty">회원 정보를 불러오는 중...</div></div>
+            </div>
+        </div>
+
         <!-- 시간대 관리 -->
         <div class="card">
             <div class="collapsible-header" onclick="toggleSection('manageSlot')">
@@ -293,6 +338,7 @@
             + '<span class="sc-check">✓</span>'
             + '<div class="sc-name">' + escHtml(s.name) + '</div>'
             + (s.description ? '<div class="sc-desc">' + escHtml(s.description) + '</div>' : '')
+            + '<button class="sc-delete" onclick="deleteSpace(' + s.id + ', \'' + escHtml(s.name) + '\', event)">삭제</button>'
             + '</div>'
         ).join('');
         hideNoSpaceHint();
@@ -313,6 +359,7 @@
         renderTimeGrid();
         loadDiary();
         loadPending();
+        loadMemberBoard();
     }
 
     function showNoSpaceHint() {
@@ -340,6 +387,22 @@
             document.getElementById('newSpaceDesc').value = '';
             document.getElementById('createSpaceForm').style.display = 'none';
             showMessage('msg', '수업을 만들었어요!', 'ok');
+            await loadMySpaces();
+        } catch (e) {
+            showMessage('msg', e.message, 'error');
+        }
+    }
+
+    async function deleteSpace(id, name, event) {
+        event.stopPropagation();
+        if (!confirm('[' + name + '] 수업을 삭제할까요?\n진행 중인 예약이 없어야 삭제할 수 있습니다.')) return;
+        try {
+            await api('DELETE', '/api/spaces/' + id);
+            if (currentSpaceId === id) {
+                currentSpaceId = null;
+                document.getElementById('mainContent').style.display = 'none';
+            }
+            showMessage('msg', '수업을 삭제했어요.', 'ok');
             await loadMySpaces();
         } catch (e) {
             showMessage('msg', e.message, 'error');
@@ -903,6 +966,47 @@
             showMessage('msg', '시간대를 삭제했어요.', 'ok');
             loadAdminSlots(); loadDiary();
         } catch (e) { showMessage('msg', e.message, 'error'); }
+    }
+
+    /* ── 회원 현황판 ── */
+    async function loadMemberBoard() {
+        if (!currentSpaceId) return;
+        const box = document.getElementById('memberBoardList');
+        try {
+            const members = await api('GET', '/api/spaces/' + currentSpaceId + '/members');
+            if (members.length === 0) {
+                box.innerHTML = '<div class="empty">아직 예약 신청을 한 참여자가 없어요.</div>';
+                return;
+            }
+            box.innerHTML = members.map(m => {
+                const pct = m.monthlyLimit > 0
+                    ? Math.min(100, Math.round(m.usedThisMonth / m.monthlyLimit * 100)) : 0;
+                const over = m.usedThisMonth >= m.monthlyLimit;
+                return '<div class="member-stat-row">'
+                    + '<span class="ms-name">' + escHtml(m.memberName) + '</span>'
+                    + '<div class="usage-bar-wrap"><div class="usage-bar' + (over ? ' full' : '') + '" style="width:' + pct + '%"></div></div>'
+                    + '<span class="ms-usage' + (over ? ' over' : '') + '">' + m.usedThisMonth + ' / ' + m.monthlyLimit + '회</span>'
+                    + '<input class="ms-limit-input" type="number" min="0" value="' + m.monthlyLimit + '" id="limit-' + m.memberId + '">'
+                    + '<button class="btn btn-small btn-sub" onclick="updateMemberLimit(' + m.memberId + ')">저장</button>'
+                    + '</div>';
+            }).join('');
+        } catch (e) {
+            box.innerHTML = '<div class="empty">' + e.message + '</div>';
+        }
+    }
+
+    async function updateMemberLimit(memberId) {
+        const input = document.getElementById('limit-' + memberId);
+        const val = parseInt(input.value, 10);
+        if (isNaN(val) || val < 0) { showMessage('msg', '올바른 숫자를 입력해 주세요.', 'error'); return; }
+        try {
+            await api('PATCH', '/api/spaces/' + currentSpaceId + '/members/' + memberId + '/limit',
+                { monthlyLimit: val });
+            showMessage('msg', '한도를 수정했어요.', 'ok');
+            loadMemberBoard();
+        } catch (e) {
+            showMessage('msg', e.message, 'error');
+        }
     }
 
     /* ── 알림 ── */

@@ -1,0 +1,123 @@
+package com.artsync.service;
+
+import com.artsync.common.exception.NotFoundException;
+import com.artsync.domain.reservation.ReservationRepository;
+import com.artsync.domain.reservation.ReservationStatus;
+import com.artsync.domain.spacemember.SpaceMember;
+import com.artsync.domain.spacemember.SpaceMemberRepository;
+import com.artsync.domain.user.User;
+import com.artsync.domain.user.UserRepository;
+import com.artsync.dto.SpaceMemberResponse;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDate;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * 수업 참여자 등록 / 월간 한도 관리 서비스.
+ */
+@Service
+@Transactional(readOnly = true)
+public class SpaceMemberService {
+
+    private final SpaceMemberRepository spaceMemberRepository;
+    private final ReservationRepository reservationRepository;
+    private final UserRepository userRepository;
+    private final SpaceService spaceService;
+
+    public SpaceMemberService(SpaceMemberRepository spaceMemberRepository,
+                              ReservationRepository reservationRepository,
+                              UserRepository userRepository,
+                              SpaceService spaceService) {
+        this.spaceMemberRepository = spaceMemberRepository;
+        this.reservationRepository = reservationRepository;
+        this.userRepository = userRepository;
+        this.spaceService = spaceService;
+    }
+
+    /**
+     * 첫 예약 시 참여자를 수업에 자동 등록.
+     * 이미 등록되어 있으면 아무것도 하지 않는다.
+     */
+    @Transactional
+    public SpaceMember getOrCreate(Long spaceId, Long memberId) {
+        return spaceMemberRepository.findBySpaceIdAndMemberId(spaceId, memberId)
+                .orElseGet(() -> {
+                    int defaultLimit = spaceService.getSpace(spaceId).getDefaultMonthlyLimit();
+                    return spaceMemberRepository.save(new SpaceMember(spaceId, memberId, defaultLimit));
+                });
+    }
+
+    /**
+     * 선생님용: 수업에 등록된 전체 참여자 목록 + 이번 달 사용 횟수.
+     */
+    public List<SpaceMemberResponse> getMemberStats(Long userId, Long spaceId) {
+        spaceService.requireOwner(userId, spaceId);
+
+        List<SpaceMember> members = spaceMemberRepository.findBySpaceIdOrderByJoinedAtAsc(spaceId);
+        if (members.isEmpty()) return List.of();
+
+        LocalDate now = LocalDate.now();
+        int year = now.getYear();
+        int month = now.getMonthValue();
+
+        // 이번 달 예약 건수 일괄 조회 (memberId → count 맵)
+        List<Object[]> rows = reservationRepository.countMonthlyBySpace(
+                spaceId,
+                List.of(ReservationStatus.REQUESTED, ReservationStatus.CONFIRMED),
+                year, month);
+
+        Map<Long, Long> usedMap = new HashMap<>();
+        for (Object[] row : rows) {
+            usedMap.put((Long) row[0], (Long) row[1]);
+        }
+
+        // 참여자 이름 일괄 조회
+        List<Long> memberIds = members.stream().map(SpaceMember::getMemberId).toList();
+        Map<Long, String> nameMap = new HashMap<>();
+        userRepository.findAllById(memberIds)
+                .forEach(u -> nameMap.put(u.getId(), u.getName()));
+
+        return members.stream()
+                .map(sm -> new SpaceMemberResponse(
+                        sm.getMemberId(),
+                        nameMap.getOrDefault(sm.getMemberId(), "알 수 없음"),
+                        sm.getMonthlyLimit(),
+                        usedMap.getOrDefault(sm.getMemberId(), 0L)))
+                .toList();
+    }
+
+    /**
+     * 선생님용: 특정 참여자의 월간 한도 수정.
+     */
+    @Transactional
+    public void updateLimit(Long userId, Long spaceId, Long memberId, int monthlyLimit) {
+        spaceService.requireOwner(userId, spaceId);
+        SpaceMember sm = spaceMemberRepository.findBySpaceIdAndMemberId(spaceId, memberId)
+                .orElseThrow(() -> new NotFoundException("해당 수업에 등록된 참여자가 아닙니다."));
+        sm.updateMonthlyLimit(monthlyLimit);
+    }
+
+    /**
+     * 참여자용: 이번 달 해당 수업 사용 횟수 조회.
+     */
+    public long getMonthlyUsed(Long memberId, Long spaceId) {
+        LocalDate now = LocalDate.now();
+        return reservationRepository.countMonthlyByMemberAndSpace(
+                memberId, spaceId,
+                List.of(ReservationStatus.REQUESTED, ReservationStatus.CONFIRMED),
+                now.getYear(), now.getMonthValue());
+    }
+
+    /**
+     * 참여자의 월간 한도 반환. SpaceMember 가 없으면 space 기본값 사용.
+     */
+    public int getMonthlyLimit(Long memberId, Long spaceId) {
+        return spaceMemberRepository.findBySpaceIdAndMemberId(spaceId, memberId)
+                .map(SpaceMember::getMonthlyLimit)
+                .orElse(spaceService.getSpace(spaceId).getDefaultMonthlyLimit());
+    }
+}

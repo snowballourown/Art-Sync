@@ -7,6 +7,7 @@ import org.springframework.data.repository.query.Param;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Reservation 엔터티 영속성 처리.
@@ -57,4 +58,45 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long> 
            "AND r.status = com.artsync.domain.reservation.ReservationStatus.REQUESTED " +
            "ORDER BY r.requestedAt ASC")
     List<Reservation> findPendingBySpaceId(@Param("spaceId") Long spaceId);
+
+    /**
+     * 특정 참여자의 특정 수업 이번 달 예약 건수 (월간 한도 체크용).
+     */
+    @Query("SELECT COUNT(r) FROM Reservation r, com.artsync.domain.slot.TimeSlot t " +
+           "WHERE t.id = r.slotId " +
+           "AND r.memberId = :memberId " +
+           "AND t.spaceId = :spaceId " +
+           "AND r.status IN :statuses " +
+           "AND YEAR(t.slotDate) = :year " +
+           "AND MONTH(t.slotDate) = :month")
+    long countMonthlyByMemberAndSpace(@Param("memberId") Long memberId,
+                                      @Param("spaceId") Long spaceId,
+                                      @Param("statuses") List<ReservationStatus> statuses,
+                                      @Param("year") int year,
+                                      @Param("month") int month);
+
+    /**
+     * 여러 참여자의 특정 수업 이번 달 예약 건수 (회원 현황판용).
+     */
+    @Query("SELECT r.memberId, COUNT(r) FROM Reservation r, com.artsync.domain.slot.TimeSlot t " +
+           "WHERE t.id = r.slotId " +
+           "AND t.spaceId = :spaceId " +
+           "AND r.status IN :statuses " +
+           "AND YEAR(t.slotDate) = :year " +
+           "AND MONTH(t.slotDate) = :month " +
+           "GROUP BY r.memberId")
+    List<Object[]> countMonthlyBySpace(@Param("spaceId") Long spaceId,
+                                       @Param("statuses") List<ReservationStatus> statuses,
+                                       @Param("year") int year,
+                                       @Param("month") int month);
+
+    /**
+     * 특정 공간의 진행 중 예약 건수 (수업 삭제 전 안전 검증용).
+     */
+    @Query("SELECT COUNT(r) FROM Reservation r " +
+           "WHERE r.slotId IN " +
+           "  (SELECT t.id FROM TimeSlot t WHERE t.spaceId = :spaceId) " +
+           "AND r.status IN :statuses")
+    long countActiveBySpaceId(@Param("spaceId") Long spaceId,
+                              @Param("statuses") List<ReservationStatus> statuses);
 }
