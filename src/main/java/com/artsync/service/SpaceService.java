@@ -10,7 +10,9 @@ import com.artsync.domain.space.SpaceRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.security.SecureRandom;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * 공간(Space) 생성·조회·권한 검증 서비스.
@@ -19,6 +21,10 @@ import java.util.List;
 @Service
 @Transactional(readOnly = true)
 public class SpaceService {
+
+    private static final String CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    private static final int JOIN_CODE_LENGTH = 6;
+    private static final SecureRandom RANDOM = new SecureRandom();
 
     private final SpaceRepository spaceRepository;
     private final TimeSlotRepository timeSlotRepository;
@@ -35,7 +41,7 @@ public class SpaceService {
     /** 공간 생성 — 호출자가 자동으로 운영자가 된다. */
     @Transactional
     public Long createSpace(Long ownerId, String name, String description) {
-        Space space = new Space(name, description, ownerId);
+        Space space = new Space(name, description, ownerId, generateUniqueJoinCode());
         return spaceRepository.save(space).getId();
     }
 
@@ -66,9 +72,23 @@ public class SpaceService {
                 .orElseThrow(() -> new NotFoundException("공간을 찾을 수 없습니다. id=" + spaceId));
     }
 
+    public Space getSpaceByJoinCode(String joinCode) {
+        String normalized = normalizeJoinCode(joinCode);
+        if (normalized.isEmpty()) {
+            throw new BusinessException("수업 코드를 입력해 주세요.");
+        }
+        return spaceRepository.findByJoinCode(normalized)
+                .orElseThrow(() -> new BusinessException("일치하는 수업 코드를 찾을 수 없습니다."));
+    }
+
     /** 내가 운영하는 공간 목록 */
     public List<Space> getMySpaces(Long ownerId) {
         return spaceRepository.findByOwnerIdOrderByCreatedAtDesc(ownerId);
+    }
+
+    /** 참여자가 코드로 등록한 공간 목록 */
+    public List<Space> getJoinedSpaces(Long memberId) {
+        return spaceRepository.findJoinedByMemberId(memberId);
     }
 
     /** 전체 공간 목록 (참가자 탐색용) */
@@ -85,5 +105,29 @@ public class SpaceService {
         if (!space.getOwnerId().equals(userId)) {
             throw new BusinessException("공간 운영자만 사용할 수 있는 기능입니다.");
         }
+    }
+
+    private String generateUniqueJoinCode() {
+        for (int i = 0; i < 100; i++) {
+            String code = generateJoinCode();
+            if (!spaceRepository.existsByJoinCode(code)) {
+                return code;
+            }
+        }
+        throw new BusinessException("수업 코드를 생성하지 못했습니다. 다시 시도해 주세요.");
+    }
+
+    private String generateJoinCode() {
+        StringBuilder sb = new StringBuilder(JOIN_CODE_LENGTH);
+        for (int i = 0; i < JOIN_CODE_LENGTH; i++) {
+            sb.append(CODE_CHARS.charAt(RANDOM.nextInt(CODE_CHARS.length())));
+        }
+        return sb.toString();
+    }
+
+    public String normalizeJoinCode(String joinCode) {
+        return joinCode == null
+                ? ""
+                : joinCode.replaceAll("[^A-Za-z0-9]", "").toUpperCase(Locale.ROOT);
     }
 }

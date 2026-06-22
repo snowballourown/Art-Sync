@@ -4,8 +4,11 @@ import com.artsync.common.web.SessionRole;
 import com.artsync.common.web.SessionUtil;
 import com.artsync.domain.user.Role;
 import com.artsync.domain.user.User;
+import com.artsync.dto.FindLoginIdRequest;
+import com.artsync.dto.FindLoginIdResponse;
 import com.artsync.dto.IdResponse;
 import com.artsync.dto.LoginRequest;
+import com.artsync.dto.ResetPasswordRequest;
 import com.artsync.dto.SignupRequest;
 import com.artsync.dto.UserResponse;
 import com.artsync.service.UserService;
@@ -34,7 +37,8 @@ public class AuthController {
     @PostMapping("/signup")
     public IdResponse signup(@Valid @RequestBody SignupRequest request) {
         Long id = userService.register(
-                request.loginId(), request.password(), request.name(), request.phone(), request.role());
+                request.loginId(), request.password(), request.name(), request.phone(),
+                request.securityQuestion(), request.securityAnswer(), request.role());
         return new IdResponse(id);
     }
 
@@ -49,6 +53,22 @@ public class AuthController {
         SessionRole role = user.getRole() == Role.TEACHER ? SessionRole.TEACHER : SessionRole.PARTICIPANT;
         SessionUtil.login(session, user.getId(), role);
         return UserResponse.from(user, role);
+    }
+
+    /** 아이디 찾기 — 가입 시 입력한 이름과 연락처로 로그인 아이디를 찾는다. */
+    @PostMapping("/find-login-id")
+    public FindLoginIdResponse findLoginId(@Valid @RequestBody FindLoginIdRequest request) {
+        return new FindLoginIdResponse(userService.findLoginIds(
+                request.name(), request.phone(), request.securityQuestion(), request.securityAnswer()));
+    }
+
+    /** 비밀번호 재설정 — 본인 정보 확인 후 새 비밀번호로 변경한다. */
+    @PostMapping("/reset-password")
+    public ResponseEntity<Void> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+        userService.resetPassword(
+                request.loginId(), request.name(), request.phone(),
+                request.securityQuestion(), request.securityAnswer(), request.newPassword());
+        return ResponseEntity.ok().build();
     }
 
     /** 로그아웃 */

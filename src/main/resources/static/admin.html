@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Art-Sync | 선생님 화면</title>
+    <title>BBIBBIART | 선생님 화면</title>
     <link rel="stylesheet" href="style.css">
     <style>
         .space-cards {
@@ -32,13 +32,35 @@
         .space-card.selected .sc-check { display: block; }
         .space-card .sc-name { font-weight: bold; font-size: 15px; color: #111; margin-bottom: 4px; }
         .space-card .sc-desc { font-size: 12px; color: var(--text-sub); line-height: 1.4; }
-        .space-card .sc-delete {
-            display: none;
-            position: absolute; bottom: 8px; right: 8px;
-            font-size: 11px; color: #999; background: none; border: 1px solid #ddd;
-            border-radius: 5px; padding: 2px 7px; cursor: pointer; line-height: 1.6;
+        .space-card .sc-code {
+            display: inline-block;
+            margin-top: 8px;
+            padding: 3px 8px;
+            border-radius: 6px;
+            background: #111;
+            color: #fff;
+            font-size: 12px;
+            font-weight: bold;
+            letter-spacing: 0.5px;
         }
-        .space-card:hover .sc-delete { display: block; }
+        .space-card .sc-actions {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+            margin-top: 10px;
+        }
+        .space-card .sc-edit,
+        .space-card .sc-delete {
+            font-size: 11px;
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 3px 8px;
+            cursor: pointer;
+            line-height: 1.6;
+            color: #555;
+        }
+        .space-card .sc-edit:hover { color: #111; border-color: #111; background: #f5f5f5; }
         .space-card .sc-delete:hover { color: #c00; border-color: #c00; background: #fff4f4; }
 
         .create-space-form {
@@ -78,6 +100,15 @@
         }
         .space-bar .sb-name { font-weight: bold; color: #111; font-size: 15px; flex: 1; }
         .space-bar .sb-label { font-size: 12px; color: var(--text-sub); }
+        .space-bar .sb-code {
+            padding: 3px 8px;
+            border-radius: 6px;
+            background: #111;
+            color: #fff;
+            font-size: 13px;
+            font-weight: bold;
+            letter-spacing: 0.5px;
+        }
 
         /* 회원 현황판 */
         .member-stat-row {
@@ -91,6 +122,14 @@
         .ms-name { font-weight: 600; font-size: 14px; flex: 1; }
         .ms-usage { font-size: 13px; color: #444; min-width: 80px; }
         .ms-usage.over { color: #c00; font-weight: bold; }
+        .ms-carryover {
+            font-size: 12px;
+            color: #666;
+            background: #f0f0f0;
+            border-radius: 999px;
+            padding: 2px 8px;
+            white-space: nowrap;
+        }
         .ms-limit-input {
             width: 56px; text-align: center;
             border: 1.5px solid var(--border); border-radius: 6px;
@@ -134,13 +173,24 @@
         </div>
 
         <div class="create-space-form" id="createSpaceForm" style="display:none;">
-            <label>수업 이름 *</label>
+            <label>수업 제목 *</label>
             <input type="text" id="newSpaceName" placeholder="예: 수채화 기초반">
-            <label>수업 설명 (선택)</label>
+            <label>수업 내용 (선택)</label>
             <textarea id="newSpaceDesc" placeholder="수업에 대한 간단한 설명"></textarea>
             <div style="display:flex;gap:8px;">
                 <button class="btn btn-green btn-small" onclick="createSpace()">만들기</button>
                 <button class="btn btn-sub btn-small" onclick="toggleCreateSpaceForm()">취소</button>
+            </div>
+        </div>
+
+        <div class="create-space-form" id="editSpaceForm" style="display:none;">
+            <label>수업 제목 *</label>
+            <input type="text" id="editSpaceName" placeholder="예: 수채화 기초반">
+            <label>수업 내용 (선택)</label>
+            <textarea id="editSpaceDesc" placeholder="수업에 대한 간단한 설명"></textarea>
+            <div style="display:flex;gap:8px;">
+                <button class="btn btn-green btn-small" onclick="updateSpace()">저장</button>
+                <button class="btn btn-sub btn-small" onclick="closeEditSpaceForm()">취소</button>
             </div>
         </div>
     </div>
@@ -155,6 +205,8 @@
         <div class="space-bar">
             <span class="sb-label">현재 수업</span>
             <span class="sb-name" id="currentSpaceLabel">—</span>
+            <span class="sb-label">수업 코드</span>
+            <span class="sb-code" id="currentSpaceCode">—</span>
         </div>
 
         <!-- 월별 다이어리 -->
@@ -297,6 +349,8 @@
 <script>
     let currentUser = null;
     let currentSpaceId = null;
+    let mySpaces = [];
+    let editingSpaceId = null;
 
     (async function init() {
         currentUser = await requireLogin('TEACHER');
@@ -316,9 +370,17 @@
     async function loadMySpaces() {
         try {
             const spaces = await api('GET', '/api/spaces/my');
+            mySpaces = spaces;
             renderSpaceCards(spaces);
-            if (spaces.length === 1) selectSpace(spaces[0].id, spaces[0].name);
-            else if (spaces.length === 0) showNoSpaceHint();
+            if (spaces.length === 0) {
+                currentSpaceId = null;
+                showNoSpaceHint();
+                return;
+            }
+            const selected = spaces.find(s => s.id === currentSpaceId);
+            if (selected) selectSpaceById(selected.id);
+            else if (spaces.length === 1) selectSpaceById(spaces[0].id);
+            else if (!currentSpaceId) showNoSpaceHint();
         } catch (e) {
             document.getElementById('spaceCards').innerHTML =
                 '<div class="empty">' + e.message + '</div>';
@@ -334,23 +396,30 @@
         }
         box.innerHTML = spaces.map(s =>
             '<div class="space-card' + (s.id === currentSpaceId ? ' selected' : '') + '" '
-            + 'id="sc-' + s.id + '" onclick="selectSpace(' + s.id + ', \'' + escHtml(s.name) + '\')">'
+            + 'id="sc-' + s.id + '" onclick="selectSpaceById(' + s.id + ')">'
             + '<span class="sc-check">✓</span>'
             + '<div class="sc-name">' + escHtml(s.name) + '</div>'
             + (s.description ? '<div class="sc-desc">' + escHtml(s.description) + '</div>' : '')
-            + '<button class="sc-delete" onclick="deleteSpace(' + s.id + ', \'' + escHtml(s.name) + '\', event)">삭제</button>'
+            + (s.joinCode ? '<div class="sc-code">코드 ' + escHtml(s.joinCode) + '</div>' : '')
+            + '<div class="sc-actions">'
+            + '<button class="sc-edit" onclick="openEditSpaceForm(' + s.id + ', event)">수정</button>'
+            + '<button class="sc-delete" onclick="deleteSpace(' + s.id + ', event)">삭제</button>'
+            + '</div>'
             + '</div>'
         ).join('');
         hideNoSpaceHint();
     }
 
-    function selectSpace(id, name) {
-        currentSpaceId = id;
+    function selectSpaceById(id) {
+        const space = mySpaces.find(s => s.id === id);
+        if (!space) return;
+        currentSpaceId = space.id;
         document.querySelectorAll('.space-card').forEach(el => el.classList.remove('selected'));
-        const card = document.getElementById('sc-' + id);
+        const card = document.getElementById('sc-' + space.id);
         if (card) card.classList.add('selected');
 
-        document.getElementById('currentSpaceLabel').textContent = name;
+        document.getElementById('currentSpaceLabel').textContent = space.name;
+        document.getElementById('currentSpaceCode').textContent = space.joinCode || '—';
         document.getElementById('mainContent').style.display = 'block';
         hideNoSpaceHint();
 
@@ -374,13 +443,14 @@
         const form = document.getElementById('createSpaceForm');
         const visible = form.style.display !== 'none';
         form.style.display = visible ? 'none' : 'block';
+        if (!visible) closeEditSpaceForm();
         if (!visible) document.getElementById('newSpaceName').focus();
     }
 
     async function createSpace() {
         const name = document.getElementById('newSpaceName').value.trim();
         const desc = document.getElementById('newSpaceDesc').value.trim();
-        if (!name) { showMessage('msg', '수업 이름을 입력해 주세요.', 'error'); return; }
+        if (!name) { showMessage('msg', '수업 제목을 입력해 주세요.', 'error'); return; }
         try {
             await api('POST', '/api/spaces', { name, description: desc });
             document.getElementById('newSpaceName').value = '';
@@ -393,8 +463,45 @@
         }
     }
 
-    async function deleteSpace(id, name, event) {
+    function openEditSpaceForm(id, event) {
         event.stopPropagation();
+        const space = mySpaces.find(s => s.id === id);
+        if (!space) return;
+        editingSpaceId = id;
+        document.getElementById('createSpaceForm').style.display = 'none';
+        document.getElementById('editSpaceName').value = space.name || '';
+        document.getElementById('editSpaceDesc').value = space.description || '';
+        document.getElementById('editSpaceForm').style.display = 'block';
+        document.getElementById('editSpaceName').focus();
+    }
+
+    function closeEditSpaceForm() {
+        editingSpaceId = null;
+        document.getElementById('editSpaceName').value = '';
+        document.getElementById('editSpaceDesc').value = '';
+        document.getElementById('editSpaceForm').style.display = 'none';
+    }
+
+    async function updateSpace() {
+        if (!editingSpaceId) return;
+        const name = document.getElementById('editSpaceName').value.trim();
+        const desc = document.getElementById('editSpaceDesc').value.trim();
+        if (!name) { showMessage('msg', '수업 제목을 입력해 주세요.', 'error'); return; }
+        try {
+            await api('PATCH', '/api/spaces/' + editingSpaceId, { name, description: desc });
+            currentSpaceId = editingSpaceId;
+            closeEditSpaceForm();
+            showMessage('msg', '수업 정보를 수정했어요.', 'ok');
+            await loadMySpaces();
+        } catch (e) {
+            showMessage('msg', e.message, 'error');
+        }
+    }
+
+    async function deleteSpace(id, event) {
+        event.stopPropagation();
+        const space = mySpaces.find(s => s.id === id);
+        const name = space ? space.name : '이 수업';
         if (!confirm('[' + name + '] 수업을 삭제할까요?\n진행 중인 예약이 없어야 삭제할 수 있습니다.')) return;
         try {
             await api('DELETE', '/api/spaces/' + id);
@@ -402,6 +509,7 @@
                 currentSpaceId = null;
                 document.getElementById('mainContent').style.display = 'none';
             }
+            if (editingSpaceId === id) closeEditSpaceForm();
             showMessage('msg', '수업을 삭제했어요.', 'ok');
             await loadMySpaces();
         } catch (e) {
@@ -979,13 +1087,19 @@
                 return;
             }
             box.innerHTML = members.map(m => {
-                const pct = m.monthlyLimit > 0
-                    ? Math.min(100, Math.round(m.usedThisMonth / m.monthlyLimit * 100)) : 0;
-                const over = m.usedThisMonth >= m.monthlyLimit;
+                const effectiveLimit = m.effectiveMonthlyLimit || m.monthlyLimit;
+                const carryover = m.carryover || 0;
+                const pct = effectiveLimit > 0
+                    ? Math.min(100, Math.round(m.usedThisMonth / effectiveLimit * 100)) : 0;
+                const over = m.usedThisMonth >= effectiveLimit;
+                const carryoverBadge = carryover > 0
+                    ? '<span class="ms-carryover">기본 ' + m.monthlyLimit + ' + 이월 ' + carryover + '</span>'
+                    : '';
                 return '<div class="member-stat-row">'
                     + '<span class="ms-name">' + escHtml(m.memberName) + '</span>'
                     + '<div class="usage-bar-wrap"><div class="usage-bar' + (over ? ' full' : '') + '" style="width:' + pct + '%"></div></div>'
-                    + '<span class="ms-usage' + (over ? ' over' : '') + '">' + m.usedThisMonth + ' / ' + m.monthlyLimit + '회</span>'
+                    + '<span class="ms-usage' + (over ? ' over' : '') + '">' + m.usedThisMonth + ' / ' + effectiveLimit + '회</span>'
+                    + carryoverBadge
                     + '<input class="ms-limit-input" type="number" min="0" value="' + m.monthlyLimit + '" id="limit-' + m.memberId + '">'
                     + '<button class="btn btn-small btn-sub" onclick="updateMemberLimit(' + m.memberId + ')">저장</button>'
                     + '</div>';

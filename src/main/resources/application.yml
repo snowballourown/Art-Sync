@@ -9,7 +9,7 @@ spring:
     active: local
 
 server:
-  port: 8080
+  port: ${SERVER_PORT:${PORT:8080}}
 
 ---
 # --------- local: H2 인메모리 (개발/학습용) ---------

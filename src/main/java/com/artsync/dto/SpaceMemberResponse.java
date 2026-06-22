@@ -7,5 +7,7 @@ public record SpaceMemberResponse(
         Long memberId,
         String memberName,
         int monthlyLimit,
-        long usedThisMonth
+        long usedThisMonth,
+        int carryover,
+        int effectiveMonthlyLimit
 ) {}

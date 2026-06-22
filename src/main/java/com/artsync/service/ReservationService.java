@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 
@@ -85,13 +86,15 @@ public class ReservationService {
                     + " 시간대와 겹치는 예약이 이미 있습니다.");
         }
 
-        // 월간 한도 체크 — SpaceMember 자동 등록 후 한도 확인
-        spaceMemberService.getOrCreate(slot.getSpaceId(), memberId);
-        long monthlyUsed = spaceMemberService.getMonthlyUsed(memberId, slot.getSpaceId());
-        int monthlyLimit = spaceMemberService.getMonthlyLimit(memberId, slot.getSpaceId());
+        // 수업 코드를 입력해 등록한 참여자만 예약할 수 있다.
+        spaceMemberService.requireMember(slot.getSpaceId(), memberId);
+        YearMonth slotMonth = YearMonth.from(slot.getSlotDate());
+        long monthlyUsed = spaceMemberService.getMonthlyUsed(memberId, slot.getSpaceId(), slotMonth);
+        int monthlyLimit = spaceMemberService.getEffectiveMonthlyLimit(memberId, slot.getSpaceId(), slotMonth);
         if (monthlyUsed >= monthlyLimit) {
             throw new BusinessException(
-                    "이번 달 수업 신청 한도(" + monthlyLimit + "회)를 모두 사용했습니다.");
+                    slotMonth.getYear() + "년 " + slotMonth.getMonthValue()
+                    + "월 수업 신청 한도(이월 포함 " + monthlyLimit + "회)를 모두 사용했습니다.");
         }
 
         Reservation reservation = new Reservation(slotId, memberId, memo);

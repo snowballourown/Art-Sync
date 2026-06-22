@@ -9,6 +9,7 @@ public record SpaceResponse(
         String name,
         String description,
         Long ownerId,
+        String joinCode,
         LocalDateTime createdAt
 ) {
     public static SpaceResponse of(Space space) {
@@ -17,6 +18,7 @@ public record SpaceResponse(
                 space.getName(),
                 space.getDescription(),
                 space.getOwnerId(),
+                space.getJoinCode(),
                 space.getCreatedAt());
     }
 }

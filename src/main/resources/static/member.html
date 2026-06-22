@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Art-Sync | 예약하기</title>
+    <title>BBIBBIART | 예약하기</title>
     <link rel="stylesheet" href="style.css">
     <style>
         /* ── 수업 탐색 카드 ── */
@@ -45,6 +45,20 @@
         .space-browse-card .sbc-desc {
             font-size: 12px; color: var(--text-sub); line-height: 1.4;
         }
+        .join-space-row {
+            display: flex;
+            gap: 8px;
+            align-items: flex-end;
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+        }
+        .join-space-row .join-code-field {
+            flex: 1;
+            min-width: 180px;
+        }
+        .join-space-row label {
+            margin-top: 0;
+        }
 
         /* ── 선택된 수업 바 ── */
         .space-bar {
@@ -71,7 +85,7 @@
 </head>
 <body>
 <div class="app-header">
-    <h1>화실 예약</h1>
+    <h1>BBIBBIART 예약</h1>
     <div class="right">
         <button class="bell" onclick="toggleNotify()">알림<span id="bellBadge" class="badge" style="display:none;">0</span></button>
         <button class="btn-small btn-sub" onclick="logout()">로그아웃</button>
@@ -94,8 +108,15 @@
     <!-- ① 수업 탐색 카드 -->
     <div class="card">
         <div class="card-header">
-            <span class="card-title">수업 선택</span>
+            <span class="card-title">내 수업</span>
             <button class="btn btn-sub btn-small" onclick="loadAllSpaces()">↻ 새로고침</button>
+        </div>
+        <div class="join-space-row">
+            <div class="join-code-field">
+                <label for="joinCodeInput">수업 코드</label>
+                <input type="text" id="joinCodeInput" placeholder="선생님에게 받은 코드">
+            </div>
+            <button class="btn btn-green btn-small" onclick="joinSpaceByCode()">등록</button>
         </div>
         <div class="space-browse-cards" id="spaceBrowseCards">
             <div class="empty">수업을 불러오는 중...</div>
@@ -105,7 +126,7 @@
     <!-- 수업 미선택 안내 -->
     <div id="noSpaceHint" class="card" style="display:none;">
         <div class="no-space-hint">
-            위에서 예약하고 싶은 수업을 선택해 주세요.
+            선생님에게 받은 수업 코드를 입력하면 예약할 수 있어요.
         </div>
     </div>
 
@@ -208,7 +229,7 @@
     function renderSpaceBrowseCards(spaces) {
         const box = document.getElementById('spaceBrowseCards');
         if (spaces.length === 0) {
-            box.innerHTML = '<div class="empty">현재 열려 있는 수업이 없어요.</div>';
+            box.innerHTML = '<div class="empty">아직 등록한 수업이 없어요.<br>선생님에게 받은 수업 코드를 입력해 주세요.</div>';
             document.getElementById('noSpaceHint').style.display = '';
             document.getElementById('mainContent').style.display = 'none';
             return;
@@ -229,6 +250,24 @@
         } else if (!currentSpaceId) {
             document.getElementById('noSpaceHint').style.display = '';
             document.getElementById('mainContent').style.display = 'none';
+        }
+    }
+
+    async function joinSpaceByCode() {
+        const input = document.getElementById('joinCodeInput');
+        const joinCode = input.value.trim();
+        if (!joinCode) {
+            showMessage('msg', '수업 코드를 입력해 주세요.', 'error');
+            return;
+        }
+        try {
+            const space = await api('POST', '/api/spaces/join', { joinCode });
+            input.value = '';
+            showMessage('msg', '수업이 등록됐어요.', 'ok');
+            await loadAllSpaces();
+            selectSpace(space.id, space.name);
+        } catch (e) {
+            showMessage('msg', e.message, 'error');
         }
     }
 
@@ -313,13 +352,30 @@
         }
 
         const slotMap = {};
+        let activeMyRes = [];
+        try {
+            const myRes = await api('GET', '/api/reservations/me');
+            activeMyRes = myRes.filter(r => r.status === 'REQUESTED' || r.status === 'CONFIRMED');
+        } catch (e) {
+            activeMyRes = [];
+        }
+        const myResStatusBySlotId = new Map(activeMyRes.map(r => [r.slotId, r.status]));
+
         await Promise.all(futureDates.map(async dateStr => {
             try {
                 const slots = await api('GET',
                     '/api/spaces/' + currentSpaceId + '/slots?date=' + dateStr);
-                slotMap[dateStr] = slots.some(s => s.status === 'AVAILABLE' && s.remaining > 0);
+                const myStatuses = slots
+                    .map(s => myResStatusBySlotId.get(s.id))
+                    .filter(Boolean);
+                slotMap[dateStr] = {
+                    hasAvailable: slots.some(s => s.status === 'AVAILABLE' && s.remaining > 0),
+                    myStatus: myStatuses.includes('CONFIRMED')
+                        ? 'CONFIRMED'
+                        : (myStatuses.length > 0 ? 'REQUESTED' : null)
+                };
             } catch (e) {
-                slotMap[dateStr] = false;
+                slotMap[dateStr] = { hasAvailable: false, myStatus: null };
             }
         }));
 
@@ -336,20 +392,29 @@
                 + String(d).padStart(2, '0');
             const isToday = dateStr === todayStr;
             const isPast  = dateStr <= todayStr;
+            const dayInfo = slotMap[dateStr] || { hasAvailable: false, myStatus: null };
 
             let cls = 'cal-cell';
             if (isPast) {
                 cls += ' cal-past';
+            } else if (dayInfo.myStatus) {
+                cls += ' cal-my-reservation';
             } else {
-                cls += slotMap[dateStr] ? ' cal-has-slots' : ' cal-no-slots';
+                cls += dayInfo.hasAvailable ? ' cal-has-slots' : ' cal-no-slots';
             }
             if (isToday) cls += ' cal-today';
 
             const clickAttr = isPast
                 ? ''
                 : ' onclick="openAvailDayDetail(\'' + dateStr + '\')"';
+            let inner = '<div class="cal-day-num">' + d + '</div>';
+            if (!isPast && dayInfo.myStatus) {
+                inner += '<div class="cal-mini-label">'
+                    + (dayInfo.myStatus === 'CONFIRMED' ? '예약확정' : '예약중')
+                    + '</div>';
+            }
             html += '<div class="' + cls + '" id="avail-cell-' + dateStr + '"' + clickAttr + '>'
-                + '<div class="cal-day-num">' + d + '</div>'
+                + inner
                 + '</div>';
         }
 
@@ -360,6 +425,7 @@
 
         html += '<div class="cal-legend">'
             + '<span class="legend-item"><span class="legend-dot ld-avail"></span>예약가능</span>'
+            + '<span class="legend-item"><span class="legend-dot ld-my-reservation"></span>내 예약</span>'
             + '<span class="legend-item"><span class="legend-dot ld-unavail"></span>예약불가</span>'
             + '<span class="legend-item"><span class="legend-dot ld-selected"></span>선택일자</span>'
             + '</div>';
@@ -407,7 +473,8 @@
             const [slots, myRes, limitInfo] = await Promise.all([
                 api('GET', '/api/spaces/' + currentSpaceId + '/slots?date=' + dateStr),
                 api('GET', '/api/reservations/me'),
-                api('GET', '/api/spaces/' + currentSpaceId + '/members/my-limit').catch(() => null)
+                api('GET', '/api/spaces/' + currentSpaceId + '/members/my-limit?year=' + y + '&month=' + m)
+                    .catch(() => null)
             ]);
             const reservedIds = new Set(
                 myRes.filter(r => r.status === 'REQUESTED' || r.status === 'CONFIRMED')
@@ -416,16 +483,22 @@
 
             // 한도 배너
             let banner = '';
+            let overLimit = false;
             if (limitInfo) {
-                const isOver = limitInfo.used >= limitInfo.limit;
+                overLimit = limitInfo.used >= limitInfo.limit;
+                const carryover = limitInfo.carryover || 0;
+                const carryoverText = carryover > 0
+                    ? ' <span style="color:#666;">(기본 ' + limitInfo.baseLimit + '회 + 이월 ' + carryover + '회)</span>'
+                    : '';
                 banner = '<div style="'
                     + 'padding:10px 14px;margin-bottom:12px;border-radius:8px;font-size:13px;'
-                    + (isOver
+                    + (overLimit
                         ? 'background:#fff0f0;border:1px solid #fca5a5;color:#c00;'
                         : 'background:#f0f0f0;border:1px solid #ddd;color:#444;')
                     + '">'
-                    + '이번 달 신청: <strong>' + limitInfo.used + ' / ' + limitInfo.limit + '회</strong>'
-                    + (isOver ? ' &nbsp;— 한도를 모두 사용했어요.' : '')
+                    + y + '년 ' + m + '월 신청: <strong>' + limitInfo.used + ' / ' + limitInfo.limit + '회</strong>'
+                    + carryoverText
+                    + (overLimit ? ' &nbsp;— 월 한도를 모두 사용했어요.' : '')
                     + '</div>';
             }
 
@@ -439,6 +512,8 @@
                 let button;
                 if (alreadyReserved) {
                     button = '<button class="btn btn-sub btn-small" disabled style="opacity:1;cursor:default;margin-top:6px;">예약 완료</button>';
+                } else if (overLimit) {
+                    button = '<button class="btn btn-gray btn-small" style="margin-top:6px;" disabled>월 한도 초과</button>';
                 } else if (slot.status === 'AVAILABLE' && slot.remaining > 0) {
                     button = '<button class="btn btn-green btn-small" style="margin-top:6px;" '
                         + 'onclick="reserveFromCalendar(' + slot.id + ',\'' + dateStr + '\')">예약 신청하기</button>';
@@ -467,8 +542,9 @@
         try {
             await api('POST', '/api/reservations', { slotId: slotId, memo: null });
             showMessage('msg', '예약을 신청했어요! 선생님 확인을 기다려 주세요.', 'ok');
+            await renderAvailCalendar();
             await openAvailDayDetail(dateStr);  // 모달 내용 새로고침
-            loadMemberDiary();
+            await loadMemberDiary();
             loadMyReservations();
         } catch (e) {
             showMessage('msg', e.message, 'error');
@@ -596,6 +672,7 @@
             await api('DELETE', '/api/reservations/' + id);
             showMessage('msg', '예약을 취소했어요.', 'ok');
             await loadMemberDiary();
+            await renderAvailCalendar();
             loadMyReservations();
             closeSlotModal();
         } catch (e) {
@@ -656,6 +733,7 @@
         try {
             await api('DELETE', '/api/reservations/' + id);
             showMessage('msg', '예약을 취소했어요.', 'ok');
+            await renderAvailCalendar();
             loadMemberDiary();
             loadMyReservations();
         } catch (e) {

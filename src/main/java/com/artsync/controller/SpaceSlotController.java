@@ -3,6 +3,7 @@ package com.artsync.controller;
 import com.artsync.common.web.SessionUtil;
 import com.artsync.dto.*;
 import com.artsync.service.ReservationService;
+import com.artsync.service.SpaceMemberService;
 import com.artsync.service.SpaceService;
 import com.artsync.service.TimeSlotService;
 import jakarta.servlet.http.HttpSession;
@@ -29,13 +30,16 @@ public class SpaceSlotController {
     private final TimeSlotService timeSlotService;
     private final ReservationService reservationService;
     private final SpaceService spaceService;
+    private final SpaceMemberService spaceMemberService;
 
     public SpaceSlotController(TimeSlotService timeSlotService,
                                ReservationService reservationService,
-                               SpaceService spaceService) {
+                               SpaceService spaceService,
+                               SpaceMemberService spaceMemberService) {
         this.timeSlotService = timeSlotService;
         this.reservationService = reservationService;
         this.spaceService = spaceService;
+        this.spaceMemberService = spaceMemberService;
     }
 
     /** 슬롯 일괄 생성 (선생님 전용) */
@@ -84,6 +88,8 @@ public class SpaceSlotController {
                     .map(slot -> SlotResponse.of(slot, reservationService.confirmedCount(slot.getId())))
                     .toList();
         } else {
+            Long memberId = SessionUtil.currentUserId(session);
+            spaceMemberService.requireMember(spaceId, memberId);
             return timeSlotService.getActiveSlots(spaceId, date).stream()
                     .map(slot -> SlotResponse.of(slot, reservationService.confirmedCount(slot.getId())))
                     .toList();

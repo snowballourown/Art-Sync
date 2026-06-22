@@ -26,6 +26,10 @@ public class Space {
     @Column(nullable = false)
     private Long ownerId;
 
+    /** 참여자가 처음 등록할 때 입력하는 수업 코드 */
+    @Column(name = "join_code", unique = true, length = 12)
+    private String joinCode;
+
     /** 신규 참여자에게 적용될 기본 월간 수업 횟수 한도 */
     @Column(nullable = false)
     private int defaultMonthlyLimit = 4;
@@ -37,10 +41,11 @@ public class Space {
         // JPA 기본 생성자
     }
 
-    public Space(String name, String description, Long ownerId) {
+    public Space(String name, String description, Long ownerId, String joinCode) {
         this.name = name;
         this.description = description;
         this.ownerId = ownerId;
+        this.joinCode = joinCode;
         this.defaultMonthlyLimit = 4;
         this.createdAt = LocalDateTime.now();
     }
@@ -58,6 +63,7 @@ public class Space {
     public String getName() { return name; }
     public String getDescription() { return description; }
     public Long getOwnerId() { return ownerId; }
+    public String getJoinCode() { return joinCode; }
     public int getDefaultMonthlyLimit() { return defaultMonthlyLimit; }
     public LocalDateTime getCreatedAt() { return createdAt; }
 }

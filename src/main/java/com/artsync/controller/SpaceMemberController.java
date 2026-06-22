@@ -10,6 +10,7 @@ import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.YearMonth;
 import java.util.List;
 
 /**
@@ -37,12 +38,20 @@ public class SpaceMemberController {
 
     /** 참여자용: 이번 달 내 사용 횟수 + 한도 조회 */
     @GetMapping("/my-limit")
-    public MyLimitResponse myLimit(@PathVariable Long spaceId, HttpSession session) {
-        SessionUtil.currentUserId(session); // 로그인 여부만 확인
+    public MyLimitResponse myLimit(@PathVariable Long spaceId,
+                                   @RequestParam(required = false) Integer year,
+                                   @RequestParam(required = false) Integer month,
+                                   HttpSession session) {
         Long memberId = SessionUtil.currentUserId(session);
-        long used  = spaceMemberService.getMonthlyUsed(memberId, spaceId);
-        int  limit = spaceMemberService.getMonthlyLimit(memberId, spaceId);
-        return new MyLimitResponse(used, limit);
+        spaceMemberService.requireMember(spaceId, memberId);
+        YearMonth fallback = YearMonth.now();
+        YearMonth targetMonth = YearMonth.of(
+                year != null ? year : fallback.getYear(),
+                month != null ? month : fallback.getMonthValue());
+        long used = spaceMemberService.getMonthlyUsed(memberId, spaceId, targetMonth);
+        int baseLimit = spaceMemberService.getMonthlyLimit(memberId, spaceId);
+        int carryover = spaceMemberService.getCarryover(memberId, spaceId, targetMonth);
+        return new MyLimitResponse(used, baseLimit + carryover, baseLimit, carryover);
     }
 
     /** 특정 참여자 월간 한도 수정 */

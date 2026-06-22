@@ -29,6 +29,14 @@ public class User {
     @Column(length = 20)
     private String phone;
 
+    /** 계정 복구 질문 */
+    @Column(name = "security_question", length = 10)
+    private String securityQuestion;
+
+    /** 계정 복구 질문 답변 (BCrypt) */
+    @Column(name = "security_answer")
+    private String securityAnswer;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 15)
     private Role role;
@@ -40,11 +48,14 @@ public class User {
         // JPA 기본 생성자
     }
 
-    public User(String loginId, String password, String name, String phone, Role role) {
+    public User(String loginId, String password, String name, String phone,
+                String securityQuestion, String securityAnswer, Role role) {
         this.loginId = loginId;
         this.password = password;
         this.name = name;
         this.phone = phone;
+        this.securityQuestion = securityQuestion;
+        this.securityAnswer = securityAnswer;
         this.role = role;
         this.createdAt = LocalDateTime.now();
     }
@@ -71,6 +82,14 @@ public class User {
 
     public String getPhone() {
         return phone;
+    }
+
+    public String getSecurityQuestion() {
+        return securityQuestion;
+    }
+
+    public String getSecurityAnswer() {
+        return securityAnswer;
     }
 
     public Role getRole() {

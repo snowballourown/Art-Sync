@@ -3,10 +3,12 @@ package com.artsync.controller;
 import com.artsync.common.web.SessionUtil;
 import com.artsync.dto.CreateSpaceRequest;
 import com.artsync.dto.IdResponse;
+import com.artsync.dto.JoinSpaceRequest;
 import com.artsync.dto.SpaceResponse;
+import com.artsync.domain.space.Space;
+import com.artsync.service.SpaceMemberService;
 import com.artsync.service.SpaceService;
 import jakarta.servlet.http.HttpSession;
-import jakarta.validation.Valid;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -22,9 +24,11 @@ import java.util.List;
 public class SpaceController {
 
     private final SpaceService spaceService;
+    private final SpaceMemberService spaceMemberService;
 
-    public SpaceController(SpaceService spaceService) {
+    public SpaceController(SpaceService spaceService, SpaceMemberService spaceMemberService) {
         this.spaceService = spaceService;
+        this.spaceMemberService = spaceMemberService;
     }
 
     /** 수업(공간) 생성 — 선생님만 */
@@ -37,12 +41,21 @@ public class SpaceController {
         return new IdResponse(id);
     }
 
-    /** 전체 공간 목록 (참가자 탐색용) */
+    /** 학생이 코드로 등록한 수업 목록 */
     @GetMapping
-    public List<SpaceResponse> listAll() {
-        return spaceService.getAllSpaces().stream()
+    public List<SpaceResponse> listJoined(HttpSession session) {
+        Long memberId = SessionUtil.currentUserId(session);
+        return spaceService.getJoinedSpaces(memberId).stream()
                 .map(SpaceResponse::of)
                 .toList();
+    }
+
+    /** 학생이 수업 코드를 입력해 수업에 참여 */
+    @PostMapping("/join")
+    public SpaceResponse join(@Valid @RequestBody JoinSpaceRequest request, HttpSession session) {
+        Long memberId = SessionUtil.currentUserId(session);
+        Space space = spaceMemberService.joinByCode(memberId, request.joinCode());
+        return SpaceResponse.of(space);
     }
 
     /** 내가 운영하는 수업 목록 (선생님 전용) */

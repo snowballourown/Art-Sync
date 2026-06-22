@@ -1,5 +1,5 @@
 /* ============================================
-   Art-Sync 공통 스타일 v3 — B&W
+   BBIBBIART 공통 스타일 v3 — B&W
    ============================================ */
 
 :root {
@@ -692,6 +692,58 @@ button { font-family: inherit; }
     color: var(--gray);
     margin-top: 2px;
 }
+.account-find-actions {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin-top: 12px;
+    font-size: 14px;
+    color: var(--border);
+}
+.account-find-actions button {
+    border: none;
+    background: transparent;
+    color: var(--text-sub);
+    font-size: 14px;
+    font-weight: bold;
+    cursor: pointer;
+    padding: 4px 2px;
+}
+.account-find-actions button:hover {
+    color: #111;
+    text-decoration: underline;
+}
+.account-find-actions span {
+    width: 1px;
+    height: 13px;
+    background: var(--border);
+}
+.account-help-panel {
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border);
+}
+.account-help-title {
+    font-size: 15px;
+    font-weight: bold;
+    color: #111;
+}
+.account-help-result {
+    margin-top: 12px;
+    padding: 11px 12px;
+    border-radius: 8px;
+    background: #f0f0f0;
+    border-left: 3px solid #111;
+    color: #111;
+    font-size: 15px;
+    font-weight: bold;
+}
+.recovery-question-group {
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border);
+}
 .admin-hint {
     margin-top: 14px;
     text-align: center;
@@ -919,6 +971,7 @@ button { font-family: inherit; }
     flex-shrink: 0;
 }
 .legend-dot.ld-avail    { background: #111; }
+.legend-dot.ld-my-reservation { background: #fff; border: 2px dashed #888; }
 .legend-dot.ld-unavail  { background: #fff; border: 1.5px solid var(--border); }
 .legend-dot.ld-selected { background: #fff; border: 2px solid #111; }
 
@@ -1021,6 +1074,27 @@ button { font-family: inherit; }
 .cal-cell.cal-has-pending .cal-name {
     background: #e8e8e8;
     color: #111;
+}
+
+/* 예약 가능 달력에서 내가 신청한 날짜 */
+.cal-cell.cal-my-reservation {
+    background: #fff;
+    border: 2px dashed #111;
+    cursor: pointer;
+}
+.cal-cell.cal-my-reservation .cal-day-num {
+    color: #111;
+}
+.cal-mini-label {
+    display: inline-block;
+    margin-top: 6px;
+    padding: 2px 5px;
+    border-radius: 4px;
+    background: #111;
+    color: #fff;
+    font-size: 10px;
+    font-weight: bold;
+    line-height: 1.2;
 }
 
 .cal-day-num {
